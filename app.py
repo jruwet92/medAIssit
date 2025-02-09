@@ -18,10 +18,13 @@ class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), nullable=False)
-    desired_day = db.Column(db.String(20), nullable=False)  # NEW FIELD
+    desired_day = db.Column(db.String(20), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
+    reason = db.Column(db.String(300), nullable=True)  # NEW FIELD
+    questions = db.Column(db.String(500), nullable=True)  # NEW FIELD
+    phone = db.Column(db.String(20), nullable=True)  # NEW FIELD
 
-# Ensure the database is created before requests
+# Ensure the database is created before handling requests
 with app.app_context():
     if not os.path.exists(db_path):
         db.create_all()
@@ -31,19 +34,22 @@ with app.app_context():
 def home():
     return render_template('frontend.html')
 
-# Add a patient (Now includes desired_day)
+# Add a patient (Updated to include new fields)
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
         data = request.json
         if not all(key in data for key in ('name', 'address', 'desired_day', 'desired_time')):
-            return jsonify({"error": "Missing fields"}), 400
+            return jsonify({"error": "Missing required fields"}), 400
         
         new_patient = Patient(
             name=data['name'], 
             address=data['address'], 
-            desired_day=data['desired_day'],  # NEW FIELD
-            desired_time=data['desired_time']
+            desired_day=data['desired_day'],  
+            desired_time=data['desired_time'],
+            reason=data.get('reason', ''),  # NEW FIELD
+            questions=data.get('questions', ''),  # NEW FIELD
+            phone=data.get('phone', '')  # NEW FIELD
         )
         db.session.add(new_patient)
         db.session.commit()
@@ -64,13 +70,37 @@ def get_patients():
 
         return jsonify([
             {
+                "id": p.id,
                 "name": p.name, 
                 "address": p.address, 
                 "desired_day": p.desired_day, 
-                "desired_time": p.desired_time
+                "desired_time": p.desired_time,
+                "reason": p.reason,  # NEW FIELD
+                "questions": p.questions,  # NEW FIELD
+                "phone": p.phone  # NEW FIELD
             } 
             for p in patients
         ])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Update a patient's details
+@app.route('/api/patients/<int:patient_id>', methods=['PUT'])
+def update_patient(patient_id):
+    try:
+        data = request.json
+        patient = Patient.query.get(patient_id)
+
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+        
+        # Update fields if provided
+        patient.reason = data.get('reason', patient.reason)
+        patient.questions = data.get('questions', patient.questions)
+        patient.phone = data.get('phone', patient.phone)
+
+        db.session.commit()
+        return jsonify({"message": "Patient details updated"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
