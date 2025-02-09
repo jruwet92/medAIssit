@@ -2,32 +2,115 @@
 <html>
 <head>
     <title>Patient Information</title>
+    <style>
+        button {
+            padding: 10px;
+            margin: 5px;
+            font-size: 16px;
+        }
+        .date-text {
+            font-size: 12px;
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
 </head>
 <body>
     <h1>Patient Information</h1>
 
-    <label for="daySelector">Select Day:</label>
-    <input type="date" id="daySelector">
-    <button onclick="fetchPatients()">Fetch Patients</button>
+    <!-- Date Navigation Buttons -->
+    <button onclick="changeDay(-1)">
+        Previous Day
+        <span class="date-text" id="prevDay"></span>
+    </button>
+    
+    <button onclick="fetchPatients()">
+        TODAY
+        <span class="date-text" id="todayDate"></span>
+    </button>
+    
+    <button onclick="changeDay(1)">
+        Next Day
+        <span class="date-text" id="nextDay"></span>
+    </button>
 
-    <ul id="patientList"></ul>
+    <!-- Sorting Buttons -->
+    <button onclick="fetchPatients('address')">Sort by Location</button>
+    <button onclick="fetchPatients('desired_time')">Sort by Time</button>
+
+    <!-- Table to Display Patients -->
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Desired Time</th>
+            </tr>
+        </thead>
+        <tbody id="patientTableBody">
+        </tbody>
+    </table>
 
     <script>
-        async function fetchPatients() {
-            const selectedDay = document.getElementById('daySelector').value;
-            if (!selectedDay) {
-                alert("Please select a day!");
-                return;
+        let selectedDate = new Date(); // Default to today's date
+
+        function formatDate(date) {
+            return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+        }
+
+        function updateDateButtons() {
+            document.getElementById("todayDate").innerText = formatDate(new Date());
+            
+            let prevDate = new Date(selectedDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            document.getElementById("prevDay").innerText = formatDate(prevDate);
+            
+            let nextDate = new Date(selectedDate);
+            nextDate.setDate(nextDate.getDate() + 1);
+            document.getElementById("nextDay").innerText = formatDate(nextDate);
+        }
+
+        function changeDay(offset) {
+            selectedDate.setDate(selectedDate.getDate() + offset);
+            updateDateButtons();
+            fetchPatients();
+        }
+
+        async function fetchPatients(sortBy = '') {
+            const formattedDate = formatDate(selectedDate);
+            let url = `/api/patients?desired_day=${formattedDate}`;
+            if (sortBy) {
+                url += `&sort_by=${sortBy}`;
             }
 
-            const response = await fetch(`/api/patients?desired_day=${selectedDay}`);
+            const response = await fetch(url);
             const patients = await response.json();
-            const list = document.getElementById('patientList');
-
-            list.innerHTML = patients.map(p => 
-                `<li>${p.name} - ${p.address} - ${p.desired_time}</li>`
+            const tableBody = document.getElementById('patientTableBody');
+            
+            tableBody.innerHTML = patients.map(p => 
+                `<tr>
+                    <td>${p.name}</td>
+                    <td>${p.address}</td>
+                    <td>${p.desired_time}</td>
+                </tr>`
             ).join('');
         }
+
+        // Initialize page
+        updateDateButtons();
+        fetchPatients();
     </script>
 </body>
 </html>
