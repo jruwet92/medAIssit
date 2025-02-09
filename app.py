@@ -1,10 +1,10 @@
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  # Import CORS to handle cross-origin requests
+from flask_cors import CORS  
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})  # Enable CORS globally
+CORS(app, resources={r"/api/*": {"origins": "*"}})  
 
 # Database Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///patients.db'
@@ -12,19 +12,22 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 class Patient(db.Model):
-    __tablename__ = 'patients'  # Explicitly define table name
+    __tablename__ = 'patients'  
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
 
-# Serve frontend.html when accessing the root URL
+# Ensure the database file and table exist before handling requests
+with app.app_context():
+    db.create_all()  # Force database creation on startup
+    print("✅ Database initialized: patients.db")  
+
 @app.route('/')
 def home():
     return render_template('frontend.html')
 
-# Add a patient
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
@@ -39,11 +42,10 @@ def add_patient():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Fetch patients with optional sorting
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
-        sort_by = request.args.get('sort_by', 'id')  # Default sorting by ID
+        sort_by = request.args.get('sort_by', 'id')  
         if sort_by not in ['id', 'name', 'address', 'desired_time']:
             return jsonify({"error": "Invalid sort parameter"}), 400
 
@@ -53,8 +55,4 @@ def get_patients():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Ensure the database exists before running the app
-    with app.app_context():
-        db.create_all()
-    
     app.run(host='0.0.0.0', port=5000, debug=True)
