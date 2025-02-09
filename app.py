@@ -20,9 +20,10 @@ class Patient(db.Model):
     address = db.Column(db.String(200), nullable=False)
     desired_day = db.Column(db.String(20), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
-    reason = db.Column(db.String(300), nullable=True)  # NEW FIELD
-    questions = db.Column(db.String(500), nullable=True)  # NEW FIELD
-    phone = db.Column(db.String(20), nullable=True)  # NEW FIELD
+    call_time = db.Column(db.String(50), nullable=True)  # NEW FIELD: Time of the Call
+    reason = db.Column(db.String(300), nullable=True)  
+    questions = db.Column(db.String(500), nullable=True)  
+    phone = db.Column(db.String(20), nullable=True)  
 
 # Ensure the database is created before handling requests
 with app.app_context():
@@ -34,7 +35,7 @@ with app.app_context():
 def home():
     return render_template('frontend.html')
 
-# Add a patient (Updated to include new fields)
+# Add a patient (Updated to include `call_time`)
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
@@ -47,9 +48,10 @@ def add_patient():
             address=data['address'], 
             desired_day=data['desired_day'],  
             desired_time=data['desired_time'],
-            reason=data.get('reason', ''),  # NEW FIELD
-            questions=data.get('questions', ''),  # NEW FIELD
-            phone=data.get('phone', '')  # NEW FIELD
+            call_time=data.get('call_time', ''),  # NEW FIELD
+            reason=data.get('reason', ''),  
+            questions=data.get('questions', ''),  
+            phone=data.get('phone', '')  
         )
         db.session.add(new_patient)
         db.session.commit()
@@ -75,16 +77,17 @@ def get_patients():
                 "address": p.address, 
                 "desired_day": p.desired_day, 
                 "desired_time": p.desired_time,
-                "reason": p.reason,  # NEW FIELD
-                "questions": p.questions,  # NEW FIELD
-                "phone": p.phone  # NEW FIELD
+                "call_time": p.call_time,  # NEW FIELD
+                "reason": p.reason,  
+                "questions": p.questions,  
+                "phone": p.phone  
             } 
             for p in patients
         ])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Update a patient's details
+# Update a patient's details, including call time
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
     try:
@@ -95,6 +98,7 @@ def update_patient(patient_id):
             return jsonify({"error": "Patient not found"}), 404
         
         # Update fields if provided
+        patient.call_time = data.get('call_time', patient.call_time)  # NEW FIELD
         patient.reason = data.get('reason', patient.reason)
         patient.questions = data.get('questions', patient.questions)
         patient.phone = data.get('phone', patient.phone)
