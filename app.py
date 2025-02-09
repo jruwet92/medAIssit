@@ -19,11 +19,6 @@ class Patient(db.Model):
     address = db.Column(db.String(200), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
 
-# Ensure the database is created before the first request
-@app.before_first_request
-def create_tables():
-    db.create_all()
-
 # Serve frontend.html when accessing the root URL
 @app.route('/')
 def home():
@@ -62,4 +57,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
