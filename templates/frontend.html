@@ -5,16 +5,28 @@
 </head>
 <body>
     <h1>Patient Information</h1>
-    <button onclick="fetchPatients('address')">Sort by Location</button>
-    <button onclick="fetchPatients('desired_time')">Sort by Time</button>
+
+    <label for="daySelector">Select Day:</label>
+    <input type="date" id="daySelector">
+    <button onclick="fetchPatients()">Fetch Patients</button>
+
     <ul id="patientList"></ul>
 
     <script>
-        async function fetchPatients(sortBy) {
-            const response = await fetch(`/api/patients?sort_by=${sortBy}`);
+        async function fetchPatients() {
+            const selectedDay = document.getElementById('daySelector').value;
+            if (!selectedDay) {
+                alert("Please select a day!");
+                return;
+            }
+
+            const response = await fetch(`/api/patients?desired_day=${selectedDay}`);
             const patients = await response.json();
             const list = document.getElementById('patientList');
-            list.innerHTML = patients.map(p => `<li>${p.name} - ${p.address} - ${p.desired_time}</li>`).join('');
+
+            list.innerHTML = patients.map(p => 
+                `<li>${p.name} - ${p.address} - ${p.desired_time}</li>`
+            ).join('');
         }
     </script>
 </body>
