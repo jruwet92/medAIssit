@@ -103,21 +103,21 @@
             text-align: left;
         }
 
-        .modal input, .modal textarea {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+        .modal label {
+            font-weight: bold;
         }
 
-        .modal button {
-            margin-top: 10px;
-            width: 100%;
+        .modal p {
+            margin: 5px 0;
+            padding: 8px;
+            background-color: #f2f2f2;
+            border-radius: 5px;
         }
 
         .close-btn {
             background-color: red;
+            width: 100%;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -156,6 +156,7 @@
             <tr>
                 <th>Name</th>
                 <th>Address</th>
+                <th>Time of the Call</th>
                 <th>Desired Time</th>
             </tr>
         </thead>
@@ -166,16 +167,21 @@
     <div id="patientModal" class="modal">
         <div class="modal-content">
             <h2>Patient Details</h2>
+            <label>Name:</label>
+            <p id="modalName"></p>
+
+            <label>Address:</label>
+            <p id="modalAddress"></p>
+
             <label>Reason for Appointment:</label>
-            <textarea id="reason"></textarea>
+            <p id="modalReason"></p>
 
             <label>Additional Questions:</label>
-            <textarea id="questions"></textarea>
+            <p id="modalQuestions"></p>
 
             <label>Phone Number:</label>
-            <input type="text" id="phone">
+            <p id="modalPhone"></p>
 
-            <button onclick="savePatientDetails()">Save</button>
             <button class="close-btn" onclick="closeModal()">Close</button>
         </div>
     </div>
@@ -230,6 +236,7 @@
                     <td>${p.name}</td>
                     <td>${p.address}</td>
                     <td>${p.desired_time}</td>
+                    <td>${p.desired_time}</td>
                 </tr>`
             ).join('');
 
@@ -239,23 +246,18 @@
 
         function openPatientModal(index) {
             selectedPatient = window.patientList[index];
-            document.getElementById("reason").value = selectedPatient.reason || "";
-            document.getElementById("questions").value = selectedPatient.questions || "";
-            document.getElementById("phone").value = selectedPatient.phone || "";
+
+            document.getElementById("modalName").innerText = selectedPatient.name;
+            document.getElementById("modalAddress").innerText = selectedPatient.address;
+            document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
+            document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
+            document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
+
             document.getElementById("patientModal").style.display = "flex";
         }
 
         function closeModal() {
             document.getElementById("patientModal").style.display = "none";
-        }
-
-        function savePatientDetails() {
-            if (selectedPatient) {
-                selectedPatient.reason = document.getElementById("reason").value;
-                selectedPatient.questions = document.getElementById("questions").value;
-                selectedPatient.phone = document.getElementById("phone").value;
-            }
-            closeModal();
         }
 
         // Initialize page
