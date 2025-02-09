@@ -1,56 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Information</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
         button {
             padding: 10px;
-            margin: 5px;
             font-size: 16px;
+            width: 120px;
+            border: none;
+            background-color: #007BFF;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
         }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
         .date-text {
-            font-size: 12px;
+            font-size: 14px;
             display: block;
         }
+
+        #displayedDate {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 10px;
         }
+
         th, td {
             border: 1px solid black;
             padding: 10px;
-            text-align: left;
+            text-align: center;
         }
+
         th {
             background-color: #f2f2f2;
+        }
+
+        /* Mobile Optimization */
+        @media screen and (max-width: 600px) {
+            table {
+                font-size: 14px;
+            }
+
+            button {
+                font-size: 14px;
+                padding: 8px;
+                width: auto;
+            }
+
+            .nav-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        /* Modal (Pop-up) Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            text-align: left;
+        }
+
+        .modal input, .modal textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .modal button {
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .close-btn {
+            background-color: red;
         }
     </style>
 </head>
 <body>
+
     <h1>Patient Information</h1>
 
-    <!-- Date Navigation Buttons -->
-    <button onclick="changeDay(-1)">
-        Previous Day
-        <span class="date-text" id="prevDay"></span>
-    </button>
-    
-    <button onclick="fetchPatients()">
-        TODAY
-        <span class="date-text" id="todayDate"></span>
-    </button>
-    
-    <button onclick="changeDay(1)">
-        Next Day
-        <span class="date-text" id="nextDay"></span>
-    </button>
+    <!-- Navigation Buttons -->
+    <div class="nav-buttons">
+        <button onclick="changeDay(-1)">
+            Previous Day
+            <span class="date-text" id="prevDay"></span>
+        </button>
+
+        <button onclick="goToToday()">
+            TODAY
+            <span class="date-text" id="todayDate"></span>
+        </button>
+
+        <button onclick="changeDay(1)">
+            Next Day
+            <span class="date-text" id="nextDay"></span>
+        </button>
+    </div>
+
+    <!-- Displayed Date -->
+    <div id="displayedDate"></div>
 
     <!-- Sorting Buttons -->
     <button onclick="fetchPatients('address')">Sort by Location</button>
     <button onclick="fetchPatients('desired_time')">Sort by Time</button>
 
-    <!-- Table to Display Patients -->
+    <!-- Patient Table -->
     <table>
         <thead>
             <tr>
@@ -59,12 +159,30 @@
                 <th>Desired Time</th>
             </tr>
         </thead>
-        <tbody id="patientTableBody">
-        </tbody>
+        <tbody id="patientTableBody"></tbody>
     </table>
+
+    <!-- Pop-up Modal -->
+    <div id="patientModal" class="modal">
+        <div class="modal-content">
+            <h2>Patient Details</h2>
+            <label>Reason for Appointment:</label>
+            <textarea id="reason"></textarea>
+
+            <label>Additional Questions:</label>
+            <textarea id="questions"></textarea>
+
+            <label>Phone Number:</label>
+            <input type="text" id="phone">
+
+            <button onclick="savePatientDetails()">Save</button>
+            <button class="close-btn" onclick="closeModal()">Close</button>
+        </div>
+    </div>
 
     <script>
         let selectedDate = new Date(); // Default to today's date
+        let selectedPatient = null; // Store selected patient for modal
 
         function formatDate(date) {
             return date.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -72,18 +190,26 @@
 
         function updateDateButtons() {
             document.getElementById("todayDate").innerText = formatDate(new Date());
-            
+
             let prevDate = new Date(selectedDate);
             prevDate.setDate(prevDate.getDate() - 1);
             document.getElementById("prevDay").innerText = formatDate(prevDate);
-            
+
             let nextDate = new Date(selectedDate);
             nextDate.setDate(nextDate.getDate() + 1);
             document.getElementById("nextDay").innerText = formatDate(nextDate);
+
+            document.getElementById("displayedDate").innerText = "Appointments for: " + formatDate(selectedDate);
         }
 
         function changeDay(offset) {
             selectedDate.setDate(selectedDate.getDate() + offset);
+            updateDateButtons();
+            fetchPatients();
+        }
+
+        function goToToday() {
+            selectedDate = new Date();
             updateDateButtons();
             fetchPatients();
         }
@@ -98,19 +224,44 @@
             const response = await fetch(url);
             const patients = await response.json();
             const tableBody = document.getElementById('patientTableBody');
-            
-            tableBody.innerHTML = patients.map(p => 
-                `<tr>
+
+            tableBody.innerHTML = patients.map((p, index) => 
+                `<tr onclick="openPatientModal(${index})">
                     <td>${p.name}</td>
                     <td>${p.address}</td>
                     <td>${p.desired_time}</td>
                 </tr>`
             ).join('');
+
+            // Store patients for modal reference
+            window.patientList = patients;
+        }
+
+        function openPatientModal(index) {
+            selectedPatient = window.patientList[index];
+            document.getElementById("reason").value = selectedPatient.reason || "";
+            document.getElementById("questions").value = selectedPatient.questions || "";
+            document.getElementById("phone").value = selectedPatient.phone || "";
+            document.getElementById("patientModal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("patientModal").style.display = "none";
+        }
+
+        function savePatientDetails() {
+            if (selectedPatient) {
+                selectedPatient.reason = document.getElementById("reason").value;
+                selectedPatient.questions = document.getElementById("questions").value;
+                selectedPatient.phone = document.getElementById("phone").value;
+            }
+            closeModal();
         }
 
         // Initialize page
         updateDateButtons();
         fetchPatients();
     </script>
+
 </body>
 </html>
