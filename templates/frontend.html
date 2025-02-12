@@ -332,7 +332,9 @@ async function fetchPatients() {
 }
 
 
-        async function toggleSeen(patientId) {
+        async function toggleSeen(patientId, event) {
+    event.stopPropagation();  // Prevent row click conflicts
+
     const response = await fetch(`/api/patients/${patientId}/seen`, { method: 'PUT' });
 
     if (response.ok) {
@@ -347,6 +349,9 @@ async function fetchPatients() {
             row.classList.remove("seen-row");
             button.textContent = "Mark as Seen";
         }
+
+        // Refresh the patient list to ensure the UI is up-to-date
+        fetchPatients();
     } else {
         console.error("Failed to update patient status");
     }
