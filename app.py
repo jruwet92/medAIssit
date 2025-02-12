@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS  
 import os
 
-# Initialize Flask app
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})  
 
@@ -13,7 +12,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Patient Model
 class Patient(db.Model):
     __tablename__ = 'patients'  
 
@@ -22,52 +20,51 @@ class Patient(db.Model):
     address = db.Column(db.String(200), nullable=False)
     desired_day = db.Column(db.String(20), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
-    call_time = db.Column(db.String(50), nullable=True)  
+    call_time = db.Column(db.String(50), nullable=True)  # NEW FIELD: Time of the Call
     reason = db.Column(db.String(300), nullable=True)  
     questions = db.Column(db.String(500), nullable=True)  
     phone = db.Column(db.String(20), nullable=True)  
+
+# Ensure the database is created before handling requests
+with app.app_context():
+    if not os.path.exists(db_path):
+        db.create_all()
+        print("✅ Database initialized: patients.db")  
 
 @app.route('/')
 def home():
     return render_template('frontend.html')
 
-# Health Check Route for Render
-@app.route('/health')
-def health():
-    return jsonify({"status": "ok"}), 200
-
-# Add a patient
+# Add a patient (Updated to include `call_time`)
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
         data = request.json
-        required_fields = ['name', 'address', 'desired_day', 'desired_time']
-
-        if not all(field in data for field in required_fields):
+        if not all(key in data for key in ('name', 'address', 'desired_day', 'desired_time')):
             return jsonify({"error": "Missing required fields"}), 400
-
+        
         new_patient = Patient(
             name=data['name'], 
             address=data['address'], 
             desired_day=data['desired_day'],  
             desired_time=data['desired_time'],
-            call_time=data.get('call_time', ''),  
+            call_time=data.get('call_time', ''),  # NEW FIELD
             reason=data.get('reason', ''),  
             questions=data.get('questions', ''),  
             phone=data.get('phone', '')  
         )
         db.session.add(new_patient)
         db.session.commit()
-        return jsonify({"message": "Patient added successfully"}), 201
-
+        return jsonify({"message": "Patient added"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Fetch patients
+# Fetch patients for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
-        day_filter = request.args.get('desired_day', None)
+        day_filter = request.args.get('desired_day', None)  # Get the day from the request
+
         if day_filter:
             patients = Patient.query.filter_by(desired_day=day_filter).order_by(Patient.desired_time).all()
         else:
@@ -80,18 +77,17 @@ def get_patients():
                 "address": p.address, 
                 "desired_day": p.desired_day, 
                 "desired_time": p.desired_time,
-                "call_time": p.call_time,  
+                "call_time": p.call_time,  # NEW FIELD
                 "reason": p.reason,  
                 "questions": p.questions,  
                 "phone": p.phone  
             } 
             for p in patients
         ])
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Update a patient's details
+# Update a patient's details, including call time
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
     try:
@@ -101,22 +97,16 @@ def update_patient(patient_id):
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
         
-        patient.call_time = data.get('call_time', patient.call_time)  
+        # Update fields if provided
+        patient.call_time = data.get('call_time', patient.call_time)  # NEW FIELD
         patient.reason = data.get('reason', patient.reason)
         patient.questions = data.get('questions', patient.questions)
         patient.phone = data.get('phone', patient.phone)
 
         db.session.commit()
         return jsonify({"message": "Patient details updated"}), 200
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Ensure tables exist before running
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        print("✅ Database tables created (if not existed).")
-
-    port = int(os.environ.get("PORT", 5000))  # Render assigns a port dynamically
-    app.run(host='0.0.0.0', port=port, debug=True)  # Debug mode enabled for better error visibility
+    app.run(host='0.0.0.0', port=5000, debug=True)
