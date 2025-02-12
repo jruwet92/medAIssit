@@ -353,7 +353,8 @@ async function fetchPatients() {
 }
 
 
-        function openPatientModal(index, event) {
+        // Open modal only when clicking on "More Details" button
+function openPatientModal(index, event) {
     event.stopPropagation();  // Prevent row click conflicts
 
     selectedPatient = window.patientList[index];
@@ -375,14 +376,21 @@ async function fetchPatients() {
     document.getElementById("patientModal").style.display = "flex";
 }
 
-        
-        function closeModal() {
-            document.getElementById("patientModal").style.display = "none";
-        }
+// Close modal
+function closeModal() {
+    document.getElementById("patientModal").style.display = "none";
+}
 
-        // Initialize page
-        updateDateButtons();
-        fetchPatients();
+// Attach event listeners to "More Details" buttons
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".details-btn").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            const row = event.target.closest("tr");
+            const index = Array.from(row.parentNode.children).indexOf(row);
+            openPatientModal(index, event);
+        });
+    });
+});
     </script>
 
 </body>
