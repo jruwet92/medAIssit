@@ -76,8 +76,14 @@ def home():
 def add_patient():
     try:
         data = request.json
-        if not all(key in data for key in ('name', 'address', 'desired_day', 'desired_time')):
-            return jsonify({"error": "Missing required fields"}), 400
+
+        # Ensure all required fields exist
+        required_fields = ["name", "address", "desired_day", "desired_time"]
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400  # Return HTTP 400 Bad Request
+
+        # Debugging: Log received data
+        print("Received patient data:", data)
 
         new_patient = Patient(
             name=data['name'],
@@ -91,8 +97,15 @@ def add_patient():
             questions=data.get('questions', ''),
             phone=data.get('phone', '')
         )
+
         db.session.add(new_patient)
         db.session.commit()
+
+        return jsonify({"message": "Patient added successfully"}), 201  # Return HTTP 201 Created
+    except Exception as e:
+        print(f"❌ Error adding patient: {e}")  # Log error for debugging
+        return jsonify({"error": str(e)}), 500  # Return HTTP 500 Internal Server Error
+
 
         # Return updated list
         return get_patients()
