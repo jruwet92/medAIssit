@@ -250,6 +250,15 @@
             document.getElementById("displayedDate").innerText = "Appointments for: " + formatDate(selectedDate);
         }
 
+         document.addEventListener("DOMContentLoaded", () => {
+        fetch('/api/patients')
+            .then(response => {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                }
+            });
+    });
+        
         function changeDay(offset) {
             selectedDate.setDate(selectedDate.getDate() + offset);
             updateDateButtons();
