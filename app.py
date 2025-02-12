@@ -39,6 +39,36 @@ with app.app_context():
         db.create_all()
         print("✅ Database initialized: patients.db")
 
+# Haversine formula to calculate distance between two coordinates
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth radius in km
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c  # Distance in km
+
+# Optimize patient route using Nearest Neighbor Algorithm
+def optimize_route(patients, start_lat=START_LAT, start_lon=START_LON):
+    if not patients:
+        return []
+
+    optimized_route = []
+    remaining_patients = patients[:]
+    current_location = (start_lat, start_lon)
+
+    while remaining_patients:
+        next_patient = min(remaining_patients, key=lambda p: haversine(
+            current_location[0], current_location[1], p.latitude, p.longitude
+        ))
+
+        optimized_route.append(next_patient)
+        remaining_patients.remove(next_patient)
+        current_location = (next_patient.latitude, next_patient.longitude)
+
+    return optimized_route
+
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
