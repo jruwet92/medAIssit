@@ -223,29 +223,40 @@
             fetchPatients();
         }
 
-        async function fetchPatients(sortBy = '') {
-            const formattedDate = formatDate(selectedDate);
-            let url = `/api/patients?desired_day=${formattedDate}`;
-            if (sortBy) {
-                url += `&sort_by=${sortBy}`;
-            }
+        async function fetchPatients() {
+    const formattedDate = formatDate(selectedDate);
+    let url = `/api/patients?desired_day=${formattedDate}`;
 
-            const response = await fetch(url);
-            const patients = await response.json();
-            const tableBody = document.getElementById('patientTableBody');
+    const response = await fetch(url);
+    const patients = await response.json();
+    const tableBody = document.getElementById('patientTableBody');
 
-            tableBody.innerHTML = patients.map((p, index) => 
-                `<tr onclick="openPatientModal(${index})">
-                    <td>${p.name}</td>
-                    <td>${p.address}</td>
-                    <td>${p.desired_time}</td>
-                    <td>${p.desired_time}</td>
-                </tr>`
-            ).join('');
+    tableBody.innerHTML = patients.map((p, index) => 
+        `<tr onclick="openPatientModal(${index})">
+            <td>${index + 1}</td>  <!-- Show the optimized order -->
+            <td>${p.name}</td>
+            <td>${p.address}</td>
+            <td>${p.desired_time}</td>
+        </tr>`
+    ).join('');
 
-            // Store patients for modal reference
-            window.patientList = patients;
-        }
+    // Store patients for modal reference
+    window.patientList = patients;
+}
+
+        async function addPatient(newPatientData) {
+    const response = await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPatientData)
+    });
+            
+    if (response.ok) {
+        fetchPatients();  // Refresh table with optimized order
+    } else {
+        console.error("Failed to add patient");
+    }
+}
 
         function openPatientModal(index) {
             selectedPatient = window.patientList[index];
