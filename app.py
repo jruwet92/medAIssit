@@ -8,9 +8,6 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.secret_key = 'your_secret_key'  # Required for session management
 
-# Hardcoded API key for automation
-API_KEY = 'your_api_key_here'  # Replace with a secure key
-
 # Database Configuration
 db_path = "patients.db"
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
@@ -97,22 +94,9 @@ def home():
         return redirect(url_for('login'))
     return render_template('frontend.html')
 
-# Middleware to check API key or session
-def authenticate():
-    # Check for API key in headers
-    api_key = request.headers.get('X-API-Key')
-    if api_key == API_KEY:
-        return True
-    # Check for session
-    if session.get('logged_in'):
-        return True
-    return False
-
 # Add a patient and return updated list in optimized order
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
-    if not authenticate():
-        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.json
 
@@ -148,8 +132,6 @@ def add_patient():
 # Fetch optimized patient list for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
-    if not authenticate():
-        return jsonify({"error": "Unauthorized"}), 401
     try:
         day_filter = request.args.get('desired_day', None)
 
@@ -189,8 +171,6 @@ def get_patients():
 # Update patient details
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
-    if not authenticate():
-        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.json
         patient = Patient.query.get(patient_id)
@@ -212,8 +192,6 @@ def update_patient(patient_id):
 # Seen functionality
 @app.route('/api/patients/<int:patient_id>/seen', methods=['PUT'])
 def toggle_patient_seen(patient_id):
-    if not authenticate():
-        return jsonify({"error": "Unauthorized"}), 401
     try:
         patient = Patient.query.get(patient_id)
         if not patient:
