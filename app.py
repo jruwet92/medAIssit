@@ -22,14 +22,16 @@ class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), nullable=False)
-    latitude = db.Column(db.Float, nullable=True)  # NEW FIELD
-    longitude = db.Column(db.Float, nullable=True)  # NEW FIELD
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
     desired_day = db.Column(db.String(20), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
     call_time = db.Column(db.String(50), nullable=True)
     reason = db.Column(db.String(300), nullable=True)
     questions = db.Column(db.String(500), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
+    seen = db.Column(db.Boolean, default=False)  # NEW COLUMN
+
 
 # Ensure the database is created before handling requests
 with app.app_context():
@@ -160,6 +162,23 @@ def update_patient(patient_id):
 
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
+
+
+#seen functionality
+@app.route('/api/patients/<int:patient_id>/seen', methods=['PUT'])
+def toggle_patient_seen(patient_id):
+    try:
+        patient = Patient.query.get(patient_id)
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+        
+        patient.seen = not patient.seen  # Toggle the status
+        db.session.commit()
+        
+        return jsonify({"message": "Patient seen status updated", "seen": patient.seen}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
         
         # Update fields if provided
         patient.call_time = data.get('call_time', patient.call_time)
