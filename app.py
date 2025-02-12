@@ -109,11 +109,6 @@ def add_patient():
         return jsonify({"error": str(e)}), 500  # Return HTTP 500 Internal Server Error
 
 
-        # Return updated list
-        return get_patients()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 # Fetch optimized patient list for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
@@ -163,8 +158,19 @@ def update_patient(patient_id):
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
 
+        # Update fields if provided
+        patient.call_time = data.get('call_time', patient.call_time)
+        patient.reason = data.get('reason', patient.reason)
+        patient.questions = data.get('questions', patient.questions)
+        patient.phone = data.get('phone', patient.phone)
 
-#seen functionality
+        db.session.commit()
+        return jsonify({"message": "Patient details updated"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Seen functionality
 @app.route('/api/patients/<int:patient_id>/seen', methods=['PUT'])
 def toggle_patient_seen(patient_id):
     try:
@@ -177,22 +183,9 @@ def toggle_patient_seen(patient_id):
 
         return jsonify({"message": "Patient seen status updated", "seen": patient.seen}), 200
 
-    except Exception as e:  # ✅ Make sure this except block exists!
-        return jsonify({"error": str(e)}), 500
-
-
-
-        
-        # Update fields if provided
-        patient.call_time = data.get('call_time', patient.call_time)
-        patient.reason = data.get('reason', patient.reason)
-        patient.questions = data.get('questions', patient.questions)
-        patient.phone = data.get('phone', patient.phone)
-
-        db.session.commit()
-        return jsonify({"message": "Patient details updated"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
