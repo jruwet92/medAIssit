@@ -1,11 +1,12 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  
+from flask_cors import CORS
 import os
 from math import radians, sin, cos, sqrt, atan2
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+app.secret_key = 'your_secret_key'  # Required for session management
 
 # Database Configuration
 db_path = "patients.db"
@@ -32,50 +33,42 @@ class Patient(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     seen = db.Column(db.Boolean, default=False)  # NEW COLUMN
 
-
 # Ensure the database is created before handling requests
 with app.app_context():
     if not os.path.exists(db_path):
         db.create_all()
         print("✅ Database initialized: patients.db")
 
-# Haversine formula to calculate distance between two coordinates
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371  # Earth radius in km
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return R * c  # Distance in km
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        code = request.form.get('code')
+        if code == '1234':  # Hardcoded code for simplicity
+            session['logged_in'] = True
+            return redirect(url_for('home'))
+        else:
+            return "Invalid code", 401
+    return render_template('login.html')
 
-# Optimize patient route using Nearest Neighbor Algorithm
-def optimize_route(patients, start_lat=START_LAT, start_lon=START_LON):
-    if not patients:
-        return []
+# Logout route
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
 
-    optimized_route = []
-    remaining_patients = patients[:]
-    current_location = (start_lat, start_lon)
-
-    while remaining_patients:
-        next_patient = min(remaining_patients, key=lambda p: haversine(
-            current_location[0], current_location[1], p.latitude, p.longitude
-        ))
-
-        optimized_route.append(next_patient)
-        remaining_patients.remove(next_patient)
-        current_location = (next_patient.latitude, next_patient.longitude)
-
-    return optimized_route
-
+# Protect the home route
 @app.route('/')
 def home():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
     return render_template('frontend.html')
 
 # Add a patient and return updated list in optimized order
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.json
 
@@ -108,10 +101,11 @@ def add_patient():
         print(f"❌ Error adding patient: {e}")  # Log error for debugging
         return jsonify({"error": str(e)}), 500  # Return HTTP 500 Internal Server Error
 
-
 # Fetch optimized patient list for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         day_filter = request.args.get('desired_day', None)
 
@@ -151,6 +145,8 @@ def get_patients():
 # Update patient details
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.json
         patient = Patient.query.get(patient_id)
@@ -169,10 +165,11 @@ def update_patient(patient_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # Seen functionality
 @app.route('/api/patients/<int:patient_id>/seen', methods=['PUT'])
 def toggle_patient_seen(patient_id):
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         patient = Patient.query.get(patient_id)
         if not patient:
@@ -185,7 +182,6 @@ def toggle_patient_seen(patient_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
