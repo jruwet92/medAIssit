@@ -30,6 +30,26 @@
             cursor: pointer;
         }
 
+        .seen-row {
+    background-color: #d3d3d3;  /* Light gray */
+    color: #555;               /* Darken text */
+}
+
+.toggle-btn {
+    padding: 5px 10px;
+    font-size: 14px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #28a745;
+    color: white;
+}
+
+.toggle-btn:hover {
+    background-color: #218838;
+}
+
+
         button:hover {
             background-color: #0056b3;
         }
@@ -143,6 +163,7 @@
         </button>
     </div>
 
+
     <!-- Displayed Date -->
     <div id="displayedDate"></div>
 
@@ -151,17 +172,20 @@
     <button onclick="fetchPatients('desired_time')">Sort by Time</button>
 
     <!-- Patient Table -->
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Address</th>
-                <th>Time of the Call</th>
-                <th>Desired Time</th>
-            </tr>
-        </thead>
-        <tbody id="patientTableBody"></tbody>
-    </table>
+   <table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Time of the Call</th>
+            <th>Desired Time</th>
+            <th>Seen</th>  <!-- New Column -->
+        </tr>
+    </thead>
+    <tbody id="patientTableBody"></tbody>
+</table>
+
 
     <!-- Pop-up Modal -->
     <div id="patientModal" class="modal">
@@ -223,7 +247,7 @@
             fetchPatients();
         }
 
-        async function fetchPatients() {
+async function fetchPatients() {
     const formattedDate = formatDate(selectedDate);
     let url = `/api/patients?desired_day=${formattedDate}`;
 
@@ -232,17 +256,23 @@
     const tableBody = document.getElementById('patientTableBody');
 
     tableBody.innerHTML = patients.map((p, index) => 
-        `<tr onclick="openPatientModal(${index})">
-            <td>${index + 1}</td>  <!-- Show the optimized order -->
+        `<tr id="row-${p.id}" class="${p.seen ? 'seen-row' : ''}">
+            <td>${index + 1}</td>
             <td>${p.name}</td>
             <td>${p.address}</td>
+            <td>${p.call_time || 'N/A'}</td>
             <td>${p.desired_time}</td>
+            <td>
+                <button class="toggle-btn" onclick="toggleSeen(${p.id})">
+                    ${p.seen ? '✔ Seen' : 'Mark as Seen'}
+                </button>
+            </td>
         </tr>`
     ).join('');
 
-    // Store patients for modal reference
     window.patientList = patients;
 }
+
 
         async function addPatient(newPatientData) {
     const response = await fetch('/api/patients', {
@@ -257,6 +287,28 @@
         console.error("Failed to add patient");
     }
 }
+
+
+        async function toggleSeen(patientId) {
+    const response = await fetch(`/api/patients/${patientId}/seen`, { method: 'PUT' });
+
+    if (response.ok) {
+        const data = await response.json();
+        const row = document.getElementById(`row-${patientId}`);
+        const button = row.querySelector(".toggle-btn");
+
+        if (data.seen) {
+            row.classList.add("seen-row");
+            button.textContent = "✔ Seen";
+        } else {
+            row.classList.remove("seen-row");
+            button.textContent = "Mark as Seen";
+        }
+    } else {
+        console.error("Failed to update patient status");
+    }
+}
+
 
         function openPatientModal(index) {
             selectedPatient = window.patientList[index];
