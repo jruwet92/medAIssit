@@ -13,17 +13,20 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 class Patient(db.Model):
-    __tablename__ = 'patients'  
+    __tablename__ = 'patients'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     address = db.Column(db.String(200), nullable=False)
+    latitude = db.Column(db.Float, nullable=True)  # NEW FIELD
+    longitude = db.Column(db.Float, nullable=True)  # NEW FIELD
     desired_day = db.Column(db.String(20), nullable=False)
     desired_time = db.Column(db.String(50), nullable=False)
-    call_time = db.Column(db.String(50), nullable=True)  # NEW FIELD: Time of the Call
-    reason = db.Column(db.String(300), nullable=True)  
-    questions = db.Column(db.String(500), nullable=True)  
-    phone = db.Column(db.String(20), nullable=True)  
+    call_time = db.Column(db.String(50), nullable=True)
+    reason = db.Column(db.String(300), nullable=True)
+    questions = db.Column(db.String(500), nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+ 
 
 # Ensure the database is created before handling requests
 with app.app_context():
@@ -42,16 +45,18 @@ def add_patient():
         data = request.json
         if not all(key in data for key in ('name', 'address', 'desired_day', 'desired_time')):
             return jsonify({"error": "Missing required fields"}), 400
-        
+
         new_patient = Patient(
-            name=data['name'], 
-            address=data['address'], 
-            desired_day=data['desired_day'],  
+            name=data['name'],
+            address=data['address'],
+            latitude=data.get('latitude', None),  # NEW FIELD
+            longitude=data.get('longitude', None),  # NEW FIELD
+            desired_day=data['desired_day'],
             desired_time=data['desired_time'],
-            call_time=data.get('call_time', ''),  # NEW FIELD
-            reason=data.get('reason', ''),  
-            questions=data.get('questions', ''),  
-            phone=data.get('phone', '')  
+            call_time=data.get('call_time', ''),
+            reason=data.get('reason', ''),
+            questions=data.get('questions', ''),
+            phone=data.get('phone', '')
         )
         db.session.add(new_patient)
         db.session.commit()
@@ -59,11 +64,12 @@ def add_patient():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 # Fetch patients for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
-        day_filter = request.args.get('desired_day', None)  # Get the day from the request
+        day_filter = request.args.get('desired_day', None)
 
         if day_filter:
             patients = Patient.query.filter_by(desired_day=day_filter).order_by(Patient.desired_time).all()
@@ -73,19 +79,22 @@ def get_patients():
         return jsonify([
             {
                 "id": p.id,
-                "name": p.name, 
-                "address": p.address, 
-                "desired_day": p.desired_day, 
+                "name": p.name,
+                "address": p.address,
+                "latitude": p.latitude,  # NEW FIELD
+                "longitude": p.longitude,  # NEW FIELD
+                "desired_day": p.desired_day,
                 "desired_time": p.desired_time,
-                "call_time": p.call_time,  # NEW FIELD
-                "reason": p.reason,  
-                "questions": p.questions,  
-                "phone": p.phone  
-            } 
+                "call_time": p.call_time,
+                "reason": p.reason,
+                "questions": p.questions,
+                "phone": p.phone
+            }
             for p in patients
         ])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 # Update a patient's details, including call time
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
