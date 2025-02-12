@@ -173,6 +173,9 @@
             <label>Address:</label>
             <p id="modalAddress"></p>
 
+            <label>GPS Coordinates:</label>
+            <p id="modalCoordinates"></p> <!-- NEW FIELD -->
+
             <label>Reason for Appointment:</label>
             <p id="modalReason"></p>
 
@@ -246,15 +249,24 @@
 
         function openPatientModal(index) {
             selectedPatient = window.patientList[index];
-
+        
             document.getElementById("modalName").innerText = selectedPatient.name;
             document.getElementById("modalAddress").innerText = selectedPatient.address;
             document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
             document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
             document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
-
+        
+            // Format GPS coordinates
+            if (selectedPatient.latitude && selectedPatient.longitude) {
+                document.getElementById("modalCoordinates").innerText = 
+                    `Lat: ${selectedPatient.latitude}, Lon: ${selectedPatient.longitude}`;
+            } else {
+                document.getElementById("modalCoordinates").innerText = "Not Available";
+            }
+        
             document.getElementById("patientModal").style.display = "flex";
         }
+
 
         function closeModal() {
             document.getElementById("patientModal").style.display = "none";
