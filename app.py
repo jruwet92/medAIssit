@@ -171,13 +171,14 @@ def toggle_patient_seen(patient_id):
         patient = Patient.query.get(patient_id)
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
-        
-        patient.seen = not patient.seen  # Toggle the status
+
+        patient.seen = not patient.seen  # Toggle seen status
         db.session.commit()
-        
+
         return jsonify({"message": "Patient seen status updated", "seen": patient.seen}), 200
-    except Exception as e:
+    except Exception as e:  # ✅ Add this `except` block to handle errors properly
         return jsonify({"error": str(e)}), 500
+
 
         
         # Update fields if provided
