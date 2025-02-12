@@ -161,7 +161,8 @@ def get_patients():
                 "call_time": p.call_time,
                 "reason": p.reason,
                 "questions": p.questions,
-                "phone": p.phone
+                "phone": p.phone,
+                "seen": p.seen  # Include seen status in response
             }
             for p in final_list
         ])
