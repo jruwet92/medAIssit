@@ -2,15 +2,19 @@ from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS  
 import os
+from math import radians, sin, cos, sqrt, atan2
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})  
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Database Configuration
 db_path = "patients.db"
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Define Starting Location for Optimization
+START_LAT, START_LON = 50.653618, 5.870655  
 
 class Patient(db.Model):
     __tablename__ = 'patients'
@@ -26,19 +30,48 @@ class Patient(db.Model):
     reason = db.Column(db.String(300), nullable=True)
     questions = db.Column(db.String(500), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
- 
 
 # Ensure the database is created before handling requests
 with app.app_context():
     if not os.path.exists(db_path):
         db.create_all()
-        print("✅ Database initialized: patients.db")  
+        print("✅ Database initialized: patients.db")
+
+# Haversine formula to calculate distance between two coordinates
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth radius in km
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c  # Distance in km
+
+# Optimize patient route using Nearest Neighbor Algorithm
+def optimize_route(patients, start_lat=START_LAT, start_lon=START_LON):
+    if not patients:
+        return []
+
+    optimized_route = []
+    remaining_patients = patients[:]
+    current_location = (start_lat, start_lon)
+
+    while remaining_patients:
+        next_patient = min(remaining_patients, key=lambda p: haversine(
+            current_location[0], current_location[1], p.latitude, p.longitude
+        ))
+
+        optimized_route.append(next_patient)
+        remaining_patients.remove(next_patient)
+        current_location = (next_patient.latitude, next_patient.longitude)
+
+    return optimized_route
 
 @app.route('/')
 def home():
     return render_template('frontend.html')
 
-# Add a patient (Updated to include `call_time`)
+# Add a patient and return updated list in optimized order
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
@@ -49,8 +82,8 @@ def add_patient():
         new_patient = Patient(
             name=data['name'],
             address=data['address'],
-            latitude=data.get('latitude', None),  # NEW FIELD
-            longitude=data.get('longitude', None),  # NEW FIELD
+            latitude=data.get('latitude', None),
+            longitude=data.get('longitude', None),
             desired_day=data['desired_day'],
             desired_time=data['desired_time'],
             call_time=data.get('call_time', ''),
@@ -60,29 +93,39 @@ def add_patient():
         )
         db.session.add(new_patient)
         db.session.commit()
-        return jsonify({"message": "Patient added"}), 201
+
+        # Return updated list
+        return get_patients()
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-# Fetch patients for a specific day
+# Fetch optimized patient list for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
         day_filter = request.args.get('desired_day', None)
 
         if day_filter:
-            patients = Patient.query.filter_by(desired_day=day_filter).order_by(Patient.desired_time).all()
+            patients = Patient.query.filter_by(desired_day=day_filter).all()
         else:
-            patients = Patient.query.order_by(Patient.desired_day, Patient.desired_time).all()
+            patients = Patient.query.all()
+
+        # Filter out patients without GPS coordinates
+        patients_with_coordinates = [p for p in patients if p.latitude and p.longitude]
+
+        # Optimize the order
+        optimized_patients = optimize_route(patients_with_coordinates)
+
+        # Combine optimized patients with those missing GPS coordinates
+        final_list = optimized_patients + [p for p in patients if not (p.latitude and p.longitude)]
 
         return jsonify([
             {
                 "id": p.id,
                 "name": p.name,
                 "address": p.address,
-                "latitude": p.latitude,  # NEW FIELD
-                "longitude": p.longitude,  # NEW FIELD
+                "latitude": p.latitude,
+                "longitude": p.longitude,
                 "desired_day": p.desired_day,
                 "desired_time": p.desired_time,
                 "call_time": p.call_time,
@@ -90,13 +133,12 @@ def get_patients():
                 "questions": p.questions,
                 "phone": p.phone
             }
-            for p in patients
+            for p in final_list
         ])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-# Update a patient's details, including call time
+# Update patient details
 @app.route('/api/patients/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
     try:
@@ -107,7 +149,7 @@ def update_patient(patient_id):
             return jsonify({"error": "Patient not found"}), 404
         
         # Update fields if provided
-        patient.call_time = data.get('call_time', patient.call_time)  # NEW FIELD
+        patient.call_time = data.get('call_time', patient.call_time)
         patient.reason = data.get('reason', patient.reason)
         patient.questions = data.get('questions', patient.questions)
         patient.phone = data.get('phone', patient.phone)
