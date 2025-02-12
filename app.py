@@ -176,8 +176,10 @@ def toggle_patient_seen(patient_id):
         db.session.commit()
 
         return jsonify({"message": "Patient seen status updated", "seen": patient.seen}), 200
-    except Exception as e:  # ✅ Add this `except` block to handle errors properly
+
+    except Exception as e:  # ✅ Make sure this except block exists!
         return jsonify({"error": str(e)}), 500
+
 
 
         
