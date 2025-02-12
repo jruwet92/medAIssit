@@ -15,9 +15,10 @@ db = SQLAlchemy(app)
 
 # Ensure tables exist on startup
 @app.before_first_request
-def create_tables():
+with app.app_context():
     db.create_all()
     app.logger.info("Database tables created (if not existed).")
+
 
 # Patient Model
 class Patient(db.Model):
