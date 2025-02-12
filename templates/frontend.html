@@ -31,23 +31,38 @@
         }
 
         .seen-row {
-    background-color: #d3d3d3;  /* Light gray */
-    color: #555;               /* Darken text */
-}
+            background-color: #d3d3d3;  /* Light gray */
+            color: #555;               /* Darken text */
+        }
 
-.toggle-btn {
-    padding: 5px 10px;
-    font-size: 14px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    background-color: #28a745;
-    color: white;
-}
+        .toggle-btn {
+            padding: 5px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .toggle-btn:hover {
+            background-color: #218838;
+        }
 
-.toggle-btn:hover {
-    background-color: #218838;
-}
+        .details-btn {
+            padding: 5px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            margin-left: 5px;
+        }
+
+        .details-btn:hover {
+            background-color: #0056b3;
+        }
 
 
         button:hover {
@@ -247,6 +262,20 @@
             fetchPatients();
         }
 
+
+        document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("#patientTableBody").forEach((table) => {
+        table.addEventListener("click", (event) => {
+            let row = event.target.closest("tr");
+            if (row && !event.target.classList.contains("toggle-btn") && !event.target.classList.contains("details-btn")) {
+                let index = Array.from(row.parentNode.children).indexOf(row);
+                openPatientModal(index, event);
+            }
+        });
+    });
+});
+
+
 async function fetchPatients() {
     const formattedDate = formatDate(selectedDate);
     let url = `/api/patients?desired_day=${formattedDate}`;
@@ -263,15 +292,20 @@ async function fetchPatients() {
             <td>${p.call_time || 'N/A'}</td>
             <td>${p.desired_time}</td>
             <td>
-                <button class="toggle-btn" onclick="toggleSeen(${p.id})">
+                <button class="toggle-btn" onclick="toggleSeen(${p.id}, event)">
                     ${p.seen ? '✔ Seen' : 'Mark as Seen'}
+                </button>
+                <button class="details-btn" onclick="openPatientModal(${index}, event)">
+                    More Details
                 </button>
             </td>
         </tr>`
     ).join('');
 
+    // Store patients for modal reference
     window.patientList = patients;
 }
+
 
 
         async function addPatient(newPatientData) {
@@ -310,27 +344,29 @@ async function fetchPatients() {
 }
 
 
-        function openPatientModal(index) {
-            selectedPatient = window.patientList[index];
-        
-            document.getElementById("modalName").innerText = selectedPatient.name;
-            document.getElementById("modalAddress").innerText = selectedPatient.address;
-            document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
-            document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
-            document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
-        
-            // Format GPS coordinates
-            if (selectedPatient.latitude && selectedPatient.longitude) {
-                document.getElementById("modalCoordinates").innerText = 
-                    `Lat: ${selectedPatient.latitude}, Lon: ${selectedPatient.longitude}`;
-            } else {
-                document.getElementById("modalCoordinates").innerText = "Not Available";
-            }
-        
-            document.getElementById("patientModal").style.display = "flex";
-        }
+        function openPatientModal(index, event) {
+    event.stopPropagation();  // Prevent row click conflicts
 
+    selectedPatient = window.patientList[index];
 
+    document.getElementById("modalName").innerText = selectedPatient.name;
+    document.getElementById("modalAddress").innerText = selectedPatient.address;
+    document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
+    document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
+    document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
+
+    // Format GPS coordinates
+    if (selectedPatient.latitude && selectedPatient.longitude) {
+        document.getElementById("modalCoordinates").innerText = 
+            `Lat: ${selectedPatient.latitude}, Lon: ${selectedPatient.longitude}`;
+    } else {
+        document.getElementById("modalCoordinates").innerText = "Not Available";
+    }
+
+    document.getElementById("patientModal").style.display = "flex";
+}
+
+        
         function closeModal() {
             document.getElementById("patientModal").style.display = "none";
         }
