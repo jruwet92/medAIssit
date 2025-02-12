@@ -64,7 +64,6 @@
             background-color: #0056b3;
         }
 
-
         button:hover {
             background-color: #0056b3;
         }
@@ -178,7 +177,6 @@
         </button>
     </div>
 
-
     <!-- Displayed Date -->
     <div id="displayedDate"></div>
 
@@ -187,20 +185,19 @@
     <button onclick="fetchPatients('desired_time')">Sort by Time</button>
 
     <!-- Patient Table -->
-   <table>
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Time of the Call</th>
-            <th>Desired Time</th>
-            <th>Seen</th>  <!-- New Column -->
-        </tr>
-    </thead>
-    <tbody id="patientTableBody"></tbody>
-</table>
-
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Time of the Call</th>
+                <th>Desired Time</th>
+                <th>Seen</th>
+            </tr>
+        </thead>
+        <tbody id="patientTableBody"></tbody>
+    </table>
 
     <!-- Pop-up Modal -->
     <div id="patientModal" class="modal">
@@ -213,7 +210,7 @@
             <p id="modalAddress"></p>
 
             <label>GPS Coordinates:</label>
-            <p id="modalCoordinates"></p> <!-- NEW FIELD -->
+            <p id="modalCoordinates"></p>
 
             <label>Reason for Appointment:</label>
             <p id="modalReason"></p>
@@ -250,15 +247,6 @@
             document.getElementById("displayedDate").innerText = "Appointments for: " + formatDate(selectedDate);
         }
 
-         document.addEventListener("DOMContentLoaded", () => {
-        fetch('/api/patients')
-            .then(response => {
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                }
-            });
-    });
-        
         function changeDay(offset) {
             selectedDate.setDate(selectedDate.getDate() + offset);
             updateDateButtons();
@@ -271,132 +259,112 @@
             fetchPatients();
         }
 
+        async function fetchPatients() {
+            const formattedDate = formatDate(selectedDate);
+            let url = `/api/patients?desired_day=${formattedDate}`;
 
-        document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("#patientTableBody").forEach((table) => {
-        table.addEventListener("click", (event) => {
-            let row = event.target.closest("tr");
-            if (row && !event.target.classList.contains("toggle-btn") && !event.target.classList.contains("details-btn")) {
-                let index = Array.from(row.parentNode.children).indexOf(row);
-                openPatientModal(index, event);
-            }
-        });
-    });
-});
+            const response = await fetch(url);
+            const patients = await response.json();
+            const tableBody = document.getElementById('patientTableBody');
 
+            tableBody.innerHTML = patients.map((p, index) => 
+                `<tr id="row-${p.id}" class="${p.seen ? 'seen-row' : ''}">
+                    <td>${index + 1}</td>
+                    <td>${p.name}</td>
+                    <td>${p.address}</td>
+                    <td>${p.call_time || 'N/A'}</td>
+                    <td>${p.desired_time}</td>
+                    <td>
+                        <button class="toggle-btn" onclick="toggleSeen(${p.id}, event)">
+                            ${p.seen ? '✔ Seen' : 'Mark as Seen'}
+                        </button>
+                        <button class="details-btn" onclick="openPatientModal(${index}, event)">
+                            More Details
+                        </button>
+                    </td>
+                </tr>`
+            ).join('');
 
-async function fetchPatients() {
-    const formattedDate = formatDate(selectedDate);
-    let url = `/api/patients?desired_day=${formattedDate}`;
-
-    const response = await fetch(url);
-    const patients = await response.json();
-    const tableBody = document.getElementById('patientTableBody');
-
-    tableBody.innerHTML = patients.map((p, index) => 
-        `<tr id="row-${p.id}" class="${p.seen ? 'seen-row' : ''}">
-            <td>${index + 1}</td>
-            <td>${p.name}</td>
-            <td>${p.address}</td>
-            <td>${p.call_time || 'N/A'}</td>
-            <td>${p.desired_time}</td>
-            <td>
-                <button class="toggle-btn" onclick="toggleSeen(${p.id}, event)">
-                    ${p.seen ? '✔ Seen' : 'Mark as Seen'}
-                </button>
-                <button class="details-btn" onclick="openPatientModal(${index}, event)">
-                    More Details
-                </button>
-            </td>
-        </tr>`
-    ).join('');
-
-    // Store patients for modal reference
-    window.patientList = patients;
-}
-
-
-
-        async function addPatient(newPatientData) {
-    const response = await fetch('/api/patients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPatientData)
-    });
-            
-    if (response.ok) {
-        fetchPatients();  // Refresh table with optimized order
-    } else {
-        console.error("Failed to add patient");
-    }
-}
-
-
-        async function toggleSeen(patientId, event) {
-    event.stopPropagation();  // Prevent row click conflicts
-
-    const response = await fetch(`/api/patients/${patientId}/seen`, { method: 'PUT' });
-
-    if (response.ok) {
-        const data = await response.json();
-        const row = document.getElementById(`row-${patientId}`);
-        const button = row.querySelector(".toggle-btn");
-
-        if (data.seen) {
-            row.classList.add("seen-row");
-            button.textContent = "✔ Seen";
-        } else {
-            row.classList.remove("seen-row");
-            button.textContent = "Mark as Seen";
+            // Store patients for modal reference
+            window.patientList = patients;
         }
 
-        // Refresh the patient list to ensure the UI is up-to-date
-        fetchPatients();
-    } else {
-        console.error("Failed to update patient status");
-    }
-}
+        async function toggleSeen(patientId, event) {
+            event.stopPropagation();  // Prevent row click conflicts
 
+            const response = await fetch(`/api/patients/${patientId}/seen`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
 
-        // Open modal only when clicking on "More Details" button
-function openPatientModal(index, event) {
-    event.stopPropagation();  // Prevent row click conflicts
+            if (response.ok) {
+                const data = await response.json();
+                const row = document.getElementById(`row-${patientId}`);
+                const button = row.querySelector(".toggle-btn");
 
-    selectedPatient = window.patientList[index];
+                if (data.seen) {
+                    row.classList.add("seen-row");
+                    button.textContent = "✔ Seen";
+                } else {
+                    row.classList.remove("seen-row");
+                    button.textContent = "Mark as Seen";
+                }
+            } else {
+                console.error("Failed to update patient status");
+            }
+        }
 
-    document.getElementById("modalName").innerText = selectedPatient.name;
-    document.getElementById("modalAddress").innerText = selectedPatient.address;
-    document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
-    document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
-    document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
+        function openPatientModal(index, event) {
+            event.stopPropagation();  // Prevent row click conflicts
 
-    // Format GPS coordinates
-    if (selectedPatient.latitude && selectedPatient.longitude) {
-        document.getElementById("modalCoordinates").innerText = 
-            `Lat: ${selectedPatient.latitude}, Lon: ${selectedPatient.longitude}`;
-    } else {
-        document.getElementById("modalCoordinates").innerText = "Not Available";
-    }
+            selectedPatient = window.patientList[index];
 
-    document.getElementById("patientModal").style.display = "flex";
-}
+            document.getElementById("modalName").innerText = selectedPatient.name;
+            document.getElementById("modalAddress").innerText = selectedPatient.address;
+            document.getElementById("modalReason").innerText = selectedPatient.reason || "N/A";
+            document.getElementById("modalQuestions").innerText = selectedPatient.questions || "N/A";
+            document.getElementById("modalPhone").innerText = selectedPatient.phone || "N/A";
 
-// Close modal
-function closeModal() {
-    document.getElementById("patientModal").style.display = "none";
-}
+            // Format GPS coordinates
+            if (selectedPatient.latitude && selectedPatient.longitude) {
+                document.getElementById("modalCoordinates").innerText = 
+                    `Lat: ${selectedPatient.latitude}, Lon: ${selectedPatient.longitude}`;
+            } else {
+                document.getElementById("modalCoordinates").innerText = "Not Available";
+            }
 
-// Attach event listeners to "More Details" buttons
-document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll(".details-btn").forEach((button) => {
-        button.addEventListener("click", (event) => {
-            const row = event.target.closest("tr");
-            const index = Array.from(row.parentNode.children).indexOf(row);
-            openPatientModal(index, event);
+            document.getElementById("patientModal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("patientModal").style.display = "none";
+        }
+
+        // Initialize page
+        document.addEventListener("DOMContentLoaded", () => {
+            // Redirect to login if not authenticated
+            fetch('/api/patients')
+                .then(response => {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                    }
+                });
+
+            // Initialize the page with today's date and fetch patients
+            updateDateButtons();
+            fetchPatients();
+
+            // Attach event listeners to "More Details" buttons
+            document.querySelectorAll(".details-btn").forEach((button) => {
+                button.addEventListener("click", (event) => {
+                    const row = event.target.closest("tr");
+                    const index = Array.from(row.parentNode.children).indexOf(row);
+                    openPatientModal(index, event);
+                });
+            });
         });
-    });
-});
     </script>
-
 </body>
 </html>
