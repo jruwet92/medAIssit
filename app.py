@@ -13,13 +13,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Ensure tables exist on startup
-@app.before_first_request
-with app.app_context():
-    db.create_all()
-    app.logger.info("Database tables created (if not existed).")
-
-
 # Patient Model
 class Patient(db.Model):
     __tablename__ = 'patients'  
@@ -48,9 +41,8 @@ def health():
 def add_patient():
     try:
         data = request.json
-        app.logger.info(f"Incoming POST request: {data}")
-
         required_fields = ['name', 'address', 'desired_day', 'desired_time']
+
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
 
@@ -69,7 +61,6 @@ def add_patient():
         return jsonify({"message": "Patient added successfully"}), 201
 
     except Exception as e:
-        app.logger.error(f"Error adding patient: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # Fetch patients
@@ -98,7 +89,6 @@ def get_patients():
         ])
 
     except Exception as e:
-        app.logger.error(f"Error fetching patients: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # Update a patient's details
@@ -106,9 +96,8 @@ def get_patients():
 def update_patient(patient_id):
     try:
         data = request.json
-        app.logger.info(f"Incoming UPDATE request for patient {patient_id}: {data}")
-
         patient = Patient.query.get(patient_id)
+
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
         
@@ -121,10 +110,13 @@ def update_patient(patient_id):
         return jsonify({"message": "Patient details updated"}), 200
 
     except Exception as e:
-        app.logger.error(f"Error updating patient {patient_id}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# Dynamic Port Binding for Render
+# Ensure tables exist before running
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        print("✅ Database tables created (if not existed).")
+
     port = int(os.environ.get("PORT", 5000))  # Render assigns a port dynamically
     app.run(host='0.0.0.0', port=port, debug=True)  # Debug mode enabled for better error visibility
