@@ -10,7 +10,10 @@ app.secret_key = 'your_secret_key'  # Required for session management
 
 # Database Configuration
 db_path = "patients.db"
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    "postgresql://medassist_db_user:C6FIRLTDcjnnd7wLNNpdxgNLXioWqQgh@dpg-cuofneogph6c73dmjb20-a.oregon-postgres.render.com/medassist_db",
+    "sqlite:///patients.db"  # Fallback for local development
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
