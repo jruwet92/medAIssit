@@ -14,8 +14,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
     "postgresql://medassist_db_user:C6FIRLTDcjnnd7wLNNpdxgNLXioWqQgh@dpg-cuofneogph6c73dmjb20-a.oregon-postgres.render.com/medassist_db",
     "sqlite:///patients.db"  # Fallback for local development
 )
+
+# 🔍 Debugging: Print which database is being used
+print(f"📌 Database URL in use: {app.config['SQLALCHEMY_DATABASE_URI']}")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Ensure the database is created before handling requests
+with app.app_context():
+    db.create_all()
+    print("✅ Database initialized successfully!")
+
 
 # Define Starting Location for Optimization
 START_LAT, START_LON = 50.653618, 5.870655  
