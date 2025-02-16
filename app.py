@@ -9,22 +9,23 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.secret_key = 'your_secret_key'  # Required for session management
 
 # Database Configuration
-db_path = "patients.db"
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    "postgresql://medassist_db_user:C6FIRLTDcjnnd7wLNNpdxgNLXioWqQgh@dpg-cuofneogph6c73dmjb20-a.oregon-postgres.render.com/medassist_db",
-    "sqlite:///patients.db"  # Fallback for local development
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL is not set! Please configure it in Render.")
 
-# 🔍 Debugging: Print which database is being used
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Debugging: Print which database is being used
 print(f"📌 Database URL in use: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Ensure the database is created before handling requests
 with app.app_context():
     db.create_all()
-    print("✅ Database initialized successfully!")
+    print("✅ Connected to PostgreSQL and initialized database!")
+
 
 
 # Define Starting Location for Optimization
