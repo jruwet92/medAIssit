@@ -47,11 +47,6 @@ class Patient(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     seen = db.Column(db.Boolean, default=False)  # NEW COLUMN
 
-# Ensure the database is created before handling requests
-with app.app_context():
-    if not os.path.exists(db_path):
-        db.create_all()
-        print("✅ Database initialized: patients.db")
 
 # Haversine formula to calculate distance between two coordinates
 def haversine(lat1, lon1, lat2, lon2):
