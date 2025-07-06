@@ -90,6 +90,12 @@ def login():
             return "Invalid code", 401
     return render_template('login.html')
 
+# initiate DB
+@app.route("/init-db")
+def init_db_route():
+    import init_db  # this runs your init_db.py script
+    return "✅ Database initialized!"
+
 # Logout route
 @app.route('/logout')
 def logout():
