@@ -1,29 +1,23 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session  
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
 from math import radians, sin, cos, sqrt, atan2
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-
-# Configure CORS
-CORS(app, resources={
-    r"/api/*": {
-        "origins": os.getenv('ALLOWED_ORIGINS', '*'),
-        "methods": ["GET", "POST", "PUT"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+app.secret_key = 'your_secret_key'  # Required for session management
 
 # Database Configuration
 DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL is not set! Please configure it in Render.")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Debugging: Print which database is being used
+print(f"📌 Database URL in use: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 db = SQLAlchemy(app)
 
@@ -228,5 +222,4 @@ def toggle_patient_seen(patient_id):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Get PORT from Render or default to 5000
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=5000, debug=True)
