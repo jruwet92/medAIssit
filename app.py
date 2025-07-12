@@ -21,16 +21,15 @@ print(f"📌 Database URL in use: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 db = SQLAlchemy(app)
 
-# Doctor's addresses (can be managed through an admin interface later)
-DOCTORS = {
-    "doctor1": {"name": "Doctor 1", "address": "Rue de l'Université 1, 4000 Liège", "latitude": 50.653618, "longitude": 5.870655},
-    "doctor2": {"name": "Doctor 2", "address": "Rue Lambert Lombard 5, 4000 Liège", "latitude": 50.6425, "longitude": 5.5714}
-}
-
 # Ensure the database is created before handling requests
 with app.app_context():
     db.create_all()
     print("✅ Connected to PostgreSQL and initialized database!")
+
+
+
+# Define Starting Location for Optimization
+START_LAT, START_LON = 50.653618, 5.870655  
 
 class Patient(db.Model):
     __tablename__ = 'patients'
@@ -46,9 +45,8 @@ class Patient(db.Model):
     reason = db.Column(db.String(300), nullable=True)
     questions = db.Column(db.String(500), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
-    seen = db.Column(db.Boolean, default=False)
-    route_position = db.Column(db.Integer, nullable=True)  # New column for route position
-    doctor_address = db.Column(db.String(50), nullable=True)  # New column for doctor's address
+    seen = db.Column(db.Boolean, default=False)  # NEW COLUMN
+
 
 # Haversine formula to calculate distance between two coordinates
 def haversine(lat1, lon1, lat2, lon2):
@@ -60,44 +58,24 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c  # Distance in km
 
-# Optimize patient route using Nearest Neighbor Algorithm and assign positions
-def optimize_and_assign_positions(patients, doctor_key):
+# Optimize patient route using Nearest Neighbor Algorithm
+def optimize_route(patients, start_lat=START_LAT, start_lon=START_LON):
     if not patients:
         return []
-    
-    if doctor_key not in DOCTORS:
-        doctor_key = list(DOCTORS.keys())[0]  # Default to first doctor
-    
-    doctor = DOCTORS[doctor_key]
-    start_location = (doctor['latitude'], doctor['longitude'])
-    
+
     optimized_route = []
-    remaining_patients = [p for p in patients if p.latitude and p.longitude]
-    current_location = start_location
-    position = 1  # Starting position number
-    
+    remaining_patients = patients[:]
+    current_location = (start_lat, start_lon)
+
     while remaining_patients:
         next_patient = min(remaining_patients, key=lambda p: haversine(
             current_location[0], current_location[1], p.latitude, p.longitude
         ))
-        
-        next_patient.route_position = position
-        next_patient.doctor_address = doctor_key
+
         optimized_route.append(next_patient)
         remaining_patients.remove(next_patient)
         current_location = (next_patient.latitude, next_patient.longitude)
-        position += 1
-    
-    # Patients without coordinates get higher position numbers
-    for patient in [p for p in patients if not (p.latitude and p.longitude)]:
-        patient.route_position = position
-        patient.doctor_address = doctor_key
-        optimized_route.append(patient)
-        position += 1
-    
-    # Commit the position changes to database
-    db.session.commit()
-    
+
     return optimized_route
 
 # Login route
@@ -129,7 +107,7 @@ def logout():
 def home():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    return render_template('frontend.html', doctors=DOCTORS)
+    return render_template('frontend.html')
 
 # Add a patient and return updated list in optimized order
 @app.route('/api/patients', methods=['POST'])
@@ -140,8 +118,9 @@ def add_patient():
         # Ensure all required fields exist
         required_fields = ["name", "address", "desired_day", "desired_time"]
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+            return jsonify({"error": "Missing required fields"}), 400  # Return HTTP 400 Bad Request
 
+        # Debugging: Log received data
         print("Received patient data:", data)
 
         new_patient = Patient(
@@ -154,38 +133,36 @@ def add_patient():
             call_time=data.get('call_time', ''),
             reason=data.get('reason', ''),
             questions=data.get('questions', ''),
-            phone=data.get('phone', ''),
-            doctor_address=data.get('doctor_address', list(DOCTORS.keys())[0])  # Default to first doctor
+            phone=data.get('phone', '')
         )
 
         db.session.add(new_patient)
         db.session.commit()
 
-        # After adding, optimize the route for this day and doctor
-        day_filter = data['desired_day']
-        doctor_key = data.get('doctor_address', list(DOCTORS.keys())[0])
-        patients = Patient.query.filter_by(desired_day=day_filter, doctor_address=doctor_key).all()
-        optimize_and_assign_positions(patients, doctor_key)
-
-        return jsonify({"message": "Patient added successfully"}), 201
+        return jsonify({"message": "Patient added successfully"}), 201  # Return HTTP 201 Created
     except Exception as e:
-        print(f"❌ Error adding patient: {e}")
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Error adding patient: {e}")  # Log error for debugging
+        return jsonify({"error": str(e)}), 500  # Return HTTP 500 Internal Server Error
 
-# Fetch optimized patient list for a specific day and doctor
+# Fetch optimized patient list for a specific day
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
         day_filter = request.args.get('desired_day', None)
-        doctor_key = request.args.get('doctor_address', list(DOCTORS.keys())[0])
-
-        if doctor_key not in DOCTORS:
-            doctor_key = list(DOCTORS.keys())[0]
 
         if day_filter:
-            patients = Patient.query.filter_by(desired_day=day_filter, doctor_address=doctor_key).order_by(Patient.route_position).all()
+            patients = Patient.query.filter_by(desired_day=day_filter).all()
         else:
-            patients = Patient.query.filter_by(doctor_address=doctor_key).order_by(Patient.route_position).all()
+            patients = Patient.query.all()
+
+        # Filter out patients without GPS coordinates
+        patients_with_coordinates = [p for p in patients if p.latitude and p.longitude]
+
+        # Optimize the order
+        optimized_patients = optimize_route(patients_with_coordinates)
+
+        # Combine optimized patients with those missing GPS coordinates
+        final_list = optimized_patients + [p for p in patients if not (p.latitude and p.longitude)]
 
         return jsonify([
             {
@@ -200,11 +177,9 @@ def get_patients():
                 "reason": p.reason,
                 "questions": p.questions,
                 "phone": p.phone,
-                "seen": p.seen,
-                "route_position": p.route_position,
-                "doctor_address": p.doctor_address
+                "seen": p.seen  # Include seen status in response
             }
-            for p in patients
+            for p in final_list
         ])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -224,13 +199,7 @@ def update_patient(patient_id):
         patient.reason = data.get('reason', patient.reason)
         patient.questions = data.get('questions', patient.questions)
         patient.phone = data.get('phone', patient.phone)
-        
-        # If doctor address changes, we need to re-optimize
-        if 'doctor_address' in data and data['doctor_address'] != patient.doctor_address:
-            patient.doctor_address = data['doctor_address']
-            patients = Patient.query.filter_by(desired_day=patient.desired_day, doctor_address=patient.doctor_address).all()
-            optimize_and_assign_positions(patients, patient.doctor_address)
-        
+
         db.session.commit()
         return jsonify({"message": "Patient details updated"}), 200
     except Exception as e:
@@ -244,31 +213,11 @@ def toggle_patient_seen(patient_id):
         if not patient:
             return jsonify({"error": "Patient not found"}), 404
 
-        patient.seen = not patient.seen
+        patient.seen = not patient.seen  # Toggle seen status
         db.session.commit()
 
         return jsonify({"message": "Patient seen status updated", "seen": patient.seen}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
-# Re-optimize route for a specific day and doctor
-@app.route('/api/optimize-route', methods=['POST'])
-def optimize_route():
-    try:
-        data = request.json
-        day_filter = data.get('desired_day')
-        doctor_key = data.get('doctor_address', list(DOCTORS.keys())[0])
-        
-        if not day_filter:
-            return jsonify({"error": "desired_day is required"}), 400
-            
-        patients = Patient.query.filter_by(desired_day=day_filter, doctor_address=doctor_key).all()
-        optimized_patients = optimize_and_assign_positions(patients, doctor_key)
-        
-        return jsonify({
-            "message": f"Route optimized for {day_filter} with {len(optimized_patients)} patients",
-            "doctor": DOCTORS.get(doctor_key, {}).get('name')
-        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
