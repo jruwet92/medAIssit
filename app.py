@@ -21,10 +21,37 @@ print(f"📌 Database URL in use: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
 db = SQLAlchemy(app)
 
+def migrate_add_route_order():
+    """Add route_order column if it doesn't exist"""
+    try:
+        # Try to add the column using raw SQL
+        with db.engine.connect() as conn:
+            # Check if column exists first
+            result = conn.execute(db.text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='patients' AND column_name='route_order'
+            """))
+            
+            if not result.fetchone():
+                print("🔄 Adding route_order column...")
+                conn.execute(db.text("ALTER TABLE patients ADD COLUMN route_order INTEGER"))
+                conn.commit()
+                print("✅ route_order column added successfully!")
+            else:
+                print("✅ route_order column already exists.")
+                
+    except Exception as e:
+        print(f"⚠️  Could not add route_order column: {e}")
+        print("💡 This might be expected if the column already exists")
+
 # Ensure the database is created before handling requests
 with app.app_context():
     db.create_all()
     print("✅ Connected to PostgreSQL and initialized database!")
+    
+    # Automatically run migration
+    migrate_add_route_order()
 
 # Doctor locations - can be expanded or made configurable
 DOCTOR_LOCATIONS = {
@@ -135,8 +162,8 @@ def login():
 # initiate DB
 @app.route("/init-db")
 def init_db_route():
-    import init_db  # this runs your init_db.py script
-    return "✅ Database initialized!"
+    migrate_add_route_order()
+    return "✅ Database initialized and migration completed!"
 
 # Logout route
 @app.route('/logout')
