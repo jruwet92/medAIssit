@@ -95,40 +95,33 @@ class Patient(db.Model):
     route_order = db.Column(db.Integer, nullable=True)  # NEW COLUMN for optimization order
 
 
-def optimize_route_for_day(desired_day, start_location_key="office"):
+def optimize_route_for_day(desired_day, start_location_key="office", only_unseen=True):
     """
     Optimize route for all patients on a specific day and update their route_order
-    Now uses the imported optimization functions
+    Now uses the imported optimization functions and focuses on unseen patients
     """
     try:
         start_location = DOCTOR_LOCATIONS[start_location_key]
         start_coords = (start_location["latitude"], start_location["longitude"])
         
-        # Get all patients for the specific day with GPS coordinates
-        patients = Patient.query.filter_by(desired_day=desired_day).filter(
-            Patient.latitude.isnot(None), 
-            Patient.longitude.isnot(None)
-        ).all()
+        # Get all patients for the specific day
+        all_patients = Patient.query.filter_by(desired_day=desired_day).all()
 
-        if not patients:
+        if not all_patients:
             return []
 
-        # Use the imported optimization function
-        optimized_route = optimize_patient_route(patients, start_coords, desired_day)
+        # Use the imported optimization function (only unseen patients by default)
+        optimized_route = optimize_patient_route(all_patients, start_coords, desired_day, only_unseen)
 
-        # Update route_order in database
+        # Reset route_order for ALL patients on this day first
+        for patient in all_patients:
+            patient.route_order = None
+
+        # Update route_order only for the optimized (unseen) patients
         route_order = 1
         for patient in optimized_route:
             patient.route_order = route_order
             route_order += 1
-
-        # Reset route_order for patients without GPS coordinates
-        patients_without_gps = Patient.query.filter_by(desired_day=desired_day).filter(
-            Patient.latitude.is_(None)
-        ).all()
-        
-        for patient in patients_without_gps:
-            patient.route_order = None
 
         # Commit changes to database
         db.session.commit()
@@ -138,6 +131,44 @@ def optimize_route_for_day(desired_day, start_location_key="office"):
     except Exception as e:
         print(f"❌ Error optimizing route: {e}")
         return []
+
+
+# New endpoint to auto-optimize route when page loads
+@app.route('/api/auto-optimize', methods=['POST'])
+def auto_optimize():
+    try:
+        data = request.json
+        desired_day = data.get('desired_day')
+        start_location = data.get('start_location', DEFAULT_START_LOCATION)
+        
+        if not desired_day:
+            return jsonify({"error": "desired_day is required"}), 400
+            
+        if start_location not in DOCTOR_LOCATIONS:
+            return jsonify({"error": "Invalid start_location"}), 400
+
+        # Auto-optimize only unseen patients
+        optimized_patients = optimize_route_for_day(desired_day, start_location, only_unseen=True)
+        
+        # Calculate total distance for response
+        total_distance = 0
+        algorithm_info = get_algorithm_info(len(optimized_patients))
+        
+        if optimized_patients:
+            start_coords = (DOCTOR_LOCATIONS[start_location]["latitude"], 
+                          DOCTOR_LOCATIONS[start_location]["longitude"])
+            total_distance = calculate_total_route_distance(optimized_patients, start_coords)
+        
+        return jsonify({
+            "message": f"Auto-optimized route for unseen patients on {desired_day}",
+            "optimized_count": len(optimized_patients),
+            "total_distance": f"{total_distance:.2f} km",
+            "algorithm_used": algorithm_info["algorithm"]
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error auto-optimizing route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # =====================================
@@ -210,9 +241,9 @@ def add_patient():
         db.session.add(new_patient)
         db.session.commit()
 
-        # Automatically optimize route for this day
+        # Automatically optimize route for this day (only unseen patients)
         start_location = data.get('start_location', DEFAULT_START_LOCATION)
-        optimized_patients = optimize_route_for_day(data['desired_day'], start_location)
+        optimized_patients = optimize_route_for_day(data['desired_day'], start_location, only_unseen=True)
 
         total_distance = 0
         if optimized_patients:
@@ -221,9 +252,10 @@ def add_patient():
             total_distance = calculate_total_route_distance(optimized_patients, start_coords)
 
         return jsonify({
-            "message": "Patient added successfully and route optimized",
+            "message": "Patient added successfully and route auto-optimized",
             "optimized_count": len(optimized_patients),
-            "total_distance": f"{total_distance:.2f} km"
+            "total_distance": f"{total_distance:.2f} km",
+            "auto_optimized": True
         }), 201
 
     except Exception as e:
@@ -244,7 +276,7 @@ def optimize_route_manual():
         if start_location not in DOCTOR_LOCATIONS:
             return jsonify({"error": "Invalid start_location"}), 400
 
-        optimized_patients = optimize_route_for_day(desired_day, start_location)
+        optimized_patients = optimize_route_for_day(desired_day, start_location, only_unseen=True)
         
         # Calculate total distance for response
         total_distance = 0
