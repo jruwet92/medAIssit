@@ -74,6 +74,16 @@
             background-color: #e6940a;
         }
 
+        .auto-optimize-btn {
+            background-color: #28a745;
+            width: 180px;
+            margin: 0 5px;
+        }
+
+        .auto-optimize-btn:hover {
+            background-color: #218838;
+        }
+
         button:hover {
             background-color: #0056b3;
         }
@@ -216,6 +226,12 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
+        .auto-optimize-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -225,11 +241,14 @@
     <!-- Doctor Location Selector -->
     <div class="location-selector">
         <label for="doctorLocation">Starting Location:</label>
-        <select id="doctorLocation">
+        <select id="doctorLocation" onchange="onLocationChange()">
             <option value="office">Office - Rue de la station 57, 4890 Thimister</option>
             <option value="home">Home - Rue Julien Ghuysen 12, 4670 Blegny</option>
         </select>
-        <button class="optimize-btn" onclick="optimizeRoute()">Optimize Route</button>
+        <button id="optimizeBtn" class="optimize-btn" onclick="optimizeRoute()" style="display: none;">Optimize Route</button>
+    </div>
+    <div class="auto-optimize-info">
+        ℹ️ Routes automatically optimize for unseen patients when page loads or data changes
     </div>
 
     <!-- Status Message -->
@@ -307,6 +326,7 @@
         let selectedDate = new Date(); // Default to today's date
         let selectedPatient = null; // Store selected patient for modal
         let currentSortBy = 'route_order'; // Default sorting
+        let lastSelectedLocation = 'office'; // Track location changes
 
         function formatDate(date) {
             return date.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -329,13 +349,25 @@
         function changeDay(offset) {
             selectedDate.setDate(selectedDate.getDate() + offset);
             updateDateButtons();
-            fetchPatients();
+            autoOptimizeAndFetch(); // Auto-optimize when changing days
         }
 
         function goToToday() {
             selectedDate = new Date();
             updateDateButtons();
-            fetchPatients();
+            autoOptimizeAndFetch(); // Auto-optimize when going to today
+        }
+
+        // Show/hide optimize button when location changes
+        function onLocationChange() {
+            const currentLocation = document.getElementById('doctorLocation').value;
+            const optimizeBtn = document.getElementById('optimizeBtn');
+            
+            if (currentLocation !== lastSelectedLocation) {
+                optimizeBtn.style.display = 'inline-block';
+            } else {
+                optimizeBtn.style.display = 'none';
+            }
         }
 
         function showStatusMessage(message, isSuccess = true) {
@@ -350,12 +382,13 @@
             }, 5000);
         }
 
+        // Optimize route when location is manually changed
         async function optimizeRoute() {
             const selectedLocation = document.getElementById('doctorLocation').value;
             const formattedDate = formatDate(selectedDate);
 
             try {
-                const response = await fetch('/api/optimize-route', {
+                const response = await fetch('/api/auto-optimize', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -369,7 +402,9 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    showStatusMessage(`Route optimized! ${result.optimized_count} patients reordered starting from ${result.start_location}`, true);
+                    showStatusMessage(`Route optimized! ${result.optimized_count} unseen patients, ${result.total_distance}`, true);
+                    lastSelectedLocation = selectedLocation; // Update tracked location
+                    document.getElementById('optimizeBtn').style.display = 'none'; // Hide button
                     fetchPatients(); // Refresh the patient list
                 } else {
                     showStatusMessage(`Error: ${result.error}`, false);
@@ -377,6 +412,40 @@
             } catch (error) {
                 showStatusMessage(`Error optimizing route: ${error.message}`, false);
             }
+        }
+
+        // Auto-optimize and fetch patients (used for page loads, day changes, etc.)
+        async function autoOptimizeAndFetch() {
+            const selectedLocation = document.getElementById('doctorLocation').value;
+            const formattedDate = formatDate(selectedDate);
+
+            try {
+                // Auto-optimize unseen patients
+                const response = await fetch('/api/auto-optimize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        desired_day: formattedDate,
+                        start_location: selectedLocation
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.optimized_count > 0) {
+                    showStatusMessage(`Auto-optimized ${result.optimized_count} unseen patients (${result.total_distance})`, true);
+                }
+
+                // Update last selected location
+                lastSelectedLocation = selectedLocation;
+            } catch (error) {
+                console.log('Auto-optimization skipped or failed:', error.message);
+            }
+
+            // Always fetch patients after optimization
+            await fetchPatients();
         }
 
         async function fetchPatients(sortBy = currentSortBy) {
@@ -390,8 +459,10 @@
 
             tableBody.innerHTML = patients.map((p, index) => {
                 let routeOrderDisplay = '';
-                if (p.route_order) {
+                if (p.route_order && !p.seen) {
                     routeOrderDisplay = `<span class="route-order">${p.route_order}</span>`;
+                } else if (p.seen) {
+                    routeOrderDisplay = '<span class="no-route">✔ Seen</span>';
                 } else if (p.latitude && p.longitude) {
                     routeOrderDisplay = '<span class="no-route">Not optimized</span>';
                 } else {
@@ -438,10 +509,17 @@
                 if (data.seen) {
                     row.classList.add("seen-row");
                     button.textContent = "✔ Seen";
+                    showStatusMessage("Patient marked as seen! Auto-optimizing remaining patients...", true);
                 } else {
                     row.classList.remove("seen-row");
                     button.textContent = "Mark as Seen";
+                    showStatusMessage("Patient unmarked! Auto-optimizing...", true);
                 }
+
+                // Auto-optimize after changing seen status
+                setTimeout(async () => {
+                    await autoOptimizeAndFetch();
+                }, 1000);
             } else {
                 console.error("Failed to update patient status");
             }
@@ -483,9 +561,10 @@
                     }
                 });
 
-            // Initialize the page with today's date and fetch patients
+            // Initialize the page with today's date and auto-optimize
             updateDateButtons();
-            fetchPatients();
+            lastSelectedLocation = document.getElementById('doctorLocation').value;
+            autoOptimizeAndFetch(); // Auto-optimize on page load
         });
     </script>
 </body>
