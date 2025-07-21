@@ -64,6 +64,16 @@
             background-color: #0056b3;
         }
 
+        .optimize-btn {
+            background-color: #FFA500;
+            width: 200px;
+            margin: 0 5px;
+        }
+
+        .optimize-btn:hover {
+            background-color: #e6940a;
+        }
+
         button:hover {
             background-color: #0056b3;
         }
@@ -77,6 +87,25 @@
             font-size: 18px;
             font-weight: bold;
             margin-bottom: 10px;
+        }
+
+        .location-selector {
+            margin: 10px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .location-selector select {
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .location-selector label {
+            font-weight: bold;
         }
 
         table {
@@ -95,6 +124,17 @@
             background-color: #f2f2f2;
         }
 
+        .route-order {
+            font-weight: bold;
+            color: #007BFF;
+            font-size: 16px;
+        }
+
+        .no-route {
+            color: #999;
+            font-style: italic;
+        }
+
         /* Mobile Optimization */
         @media screen and (max-width: 600px) {
             table {
@@ -110,6 +150,10 @@
             .nav-buttons {
                 flex-direction: column;
                 align-items: center;
+            }
+
+            .location-selector {
+                flex-direction: column;
             }
         }
 
@@ -153,11 +197,43 @@
             width: 100%;
             margin-top: 10px;
         }
+
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
     </style>
 </head>
 <body>
 
     <h1>Patient Information</h1>
+
+    <!-- Doctor Location Selector -->
+    <div class="location-selector">
+        <label for="doctorLocation">Starting Location:</label>
+        <select id="doctorLocation">
+            <option value="office">Office - Rue de la station 57, 4890 Thimister</option>
+            <option value="home">Home - Rue Julien Ghuysen 12, 4670 Blegny</option>
+        </select>
+        <button class="optimize-btn" onclick="optimizeRoute()">Optimize Route</button>
+    </div>
+
+    <!-- Status Message -->
+    <div id="statusMessage" class="status-message"></div>
 
     <!-- Navigation Buttons -->
     <div class="nav-buttons">
@@ -181,6 +257,7 @@
     <div id="displayedDate"></div>
 
     <!-- Sorting Buttons -->
+    <button onclick="fetchPatients('route_order')">Sort by Optimized Route</button>
     <button onclick="fetchPatients('address')">Sort by Location</button>
     <button onclick="fetchPatients('desired_time')">Sort by Time</button>
 
@@ -189,6 +266,7 @@
         <thead>
             <tr>
                 <th>#</th>
+                <th>Route Order</th>
                 <th>Name</th>
                 <th>Address</th>
                 <th>Time of the Call</th>
@@ -228,6 +306,7 @@
     <script>
         let selectedDate = new Date(); // Default to today's date
         let selectedPatient = null; // Store selected patient for modal
+        let currentSortBy = 'route_order'; // Default sorting
 
         function formatDate(date) {
             return date.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -259,17 +338,69 @@
             fetchPatients();
         }
 
-        async function fetchPatients() {
+        function showStatusMessage(message, isSuccess = true) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `status-message ${isSuccess ? 'status-success' : 'status-error'}`;
+            statusElement.style.display = 'block';
+            
+            // Hide message after 5 seconds
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+
+        async function optimizeRoute() {
+            const selectedLocation = document.getElementById('doctorLocation').value;
             const formattedDate = formatDate(selectedDate);
-            let url = `/api/patients?desired_day=${formattedDate}`;
+
+            try {
+                const response = await fetch('/api/optimize-route', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        desired_day: formattedDate,
+                        start_location: selectedLocation
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showStatusMessage(`Route optimized! ${result.optimized_count} patients reordered starting from ${result.start_location}`, true);
+                    fetchPatients(); // Refresh the patient list
+                } else {
+                    showStatusMessage(`Error: ${result.error}`, false);
+                }
+            } catch (error) {
+                showStatusMessage(`Error optimizing route: ${error.message}`, false);
+            }
+        }
+
+        async function fetchPatients(sortBy = currentSortBy) {
+            currentSortBy = sortBy;
+            const formattedDate = formatDate(selectedDate);
+            let url = `/api/patients?desired_day=${formattedDate}&sort_by=${sortBy}`;
 
             const response = await fetch(url);
             const patients = await response.json();
             const tableBody = document.getElementById('patientTableBody');
 
-            tableBody.innerHTML = patients.map((p, index) => 
-                `<tr id="row-${p.id}" class="${p.seen ? 'seen-row' : ''}">
+            tableBody.innerHTML = patients.map((p, index) => {
+                let routeOrderDisplay = '';
+                if (p.route_order) {
+                    routeOrderDisplay = `<span class="route-order">${p.route_order}</span>`;
+                } else if (p.latitude && p.longitude) {
+                    routeOrderDisplay = '<span class="no-route">Not optimized</span>';
+                } else {
+                    routeOrderDisplay = '<span class="no-route">No GPS</span>';
+                }
+
+                return `<tr id="row-${p.id}" class="${p.seen ? 'seen-row' : ''}">
                     <td>${index + 1}</td>
+                    <td>${routeOrderDisplay}</td>
                     <td>${p.name}</td>
                     <td>${p.address}</td>
                     <td>${p.call_time || 'N/A'}</td>
@@ -282,8 +413,8 @@
                             More Details
                         </button>
                     </td>
-                </tr>`
-            ).join('');
+                </tr>`;
+            }).join('');
 
             // Store patients for modal reference
             window.patientList = patients;
@@ -355,15 +486,6 @@
             // Initialize the page with today's date and fetch patients
             updateDateButtons();
             fetchPatients();
-
-            // Attach event listeners to "More Details" buttons
-            document.querySelectorAll(".details-btn").forEach((button) => {
-                button.addEventListener("click", (event) => {
-                    const row = event.target.closest("tr");
-                    const index = Array.from(row.parentNode.children).indexOf(row);
-                    openPatientModal(index, event);
-                });
-            });
         });
     </script>
 </body>
