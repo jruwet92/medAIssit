@@ -26,10 +26,22 @@ with app.app_context():
     db.create_all()
     print("✅ Connected to PostgreSQL and initialized database!")
 
+# Doctor locations - can be expanded or made configurable
+DOCTOR_LOCATIONS = {
+    "office": {
+        "name": "Office - Rue de la station 57, 4890 Thimister",
+        "latitude": 50.653662,
+        "longitude": 5.871008
+    },
+    "home": {
+        "name": "Home - Rue Julien Ghuysen 12, 4670 Blegny, Belgium",
+        "latitude": 50.670612,
+        "longitude": 5.727724
+    }
+}
 
-
-# Define Starting Location for Optimization
-START_LAT, START_LON = 50.653618, 5.870655  
+# Default starting location (office)
+DEFAULT_START_LOCATION = "office"
 
 class Patient(db.Model):
     __tablename__ = 'patients'
@@ -45,7 +57,8 @@ class Patient(db.Model):
     reason = db.Column(db.String(300), nullable=True)
     questions = db.Column(db.String(500), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
-    seen = db.Column(db.Boolean, default=False)  # NEW COLUMN
+    seen = db.Column(db.Boolean, default=False)
+    route_order = db.Column(db.Integer, nullable=True)  # NEW COLUMN for optimization order
 
 
 # Haversine formula to calculate distance between two coordinates
@@ -59,24 +72,53 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c  # Distance in km
 
 # Optimize patient route using Nearest Neighbor Algorithm
-def optimize_route(patients, start_lat=START_LAT, start_lon=START_LON):
-    if not patients:
+def optimize_route_for_day(desired_day, start_location_key="office"):
+    """Optimize route for all patients on a specific day and update their route_order"""
+    try:
+        start_location = DOCTOR_LOCATIONS[start_location_key]
+        start_lat, start_lon = start_location["latitude"], start_location["longitude"]
+        
+        # Get all patients for the specific day with GPS coordinates
+        patients = Patient.query.filter_by(desired_day=desired_day).filter(
+            Patient.latitude.isnot(None), 
+            Patient.longitude.isnot(None)
+        ).all()
+
+        if not patients:
+            return []
+
+        optimized_route = []
+        remaining_patients = patients[:]
+        current_location = (start_lat, start_lon)
+        route_order = 1
+
+        while remaining_patients:
+            next_patient = min(remaining_patients, key=lambda p: haversine(
+                current_location[0], current_location[1], p.latitude, p.longitude
+            ))
+
+            next_patient.route_order = route_order
+            optimized_route.append(next_patient)
+            remaining_patients.remove(next_patient)
+            current_location = (next_patient.latitude, next_patient.longitude)
+            route_order += 1
+
+        # Reset route_order for patients without GPS coordinates
+        patients_without_gps = Patient.query.filter_by(desired_day=desired_day).filter(
+            Patient.latitude.is_(None)
+        ).all()
+        
+        for patient in patients_without_gps:
+            patient.route_order = None
+
+        # Commit changes to database
+        db.session.commit()
+        
+        return optimized_route
+
+    except Exception as e:
+        print(f"❌ Error optimizing route: {e}")
         return []
-
-    optimized_route = []
-    remaining_patients = patients[:]
-    current_location = (start_lat, start_lon)
-
-    while remaining_patients:
-        next_patient = min(remaining_patients, key=lambda p: haversine(
-            current_location[0], current_location[1], p.latitude, p.longitude
-        ))
-
-        optimized_route.append(next_patient)
-        remaining_patients.remove(next_patient)
-        current_location = (next_patient.latitude, next_patient.longitude)
-
-    return optimized_route
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -109,7 +151,12 @@ def home():
         return redirect(url_for('login'))
     return render_template('frontend.html')
 
-# Add a patient and return updated list in optimized order
+# Get doctor locations
+@app.route('/api/doctor-locations', methods=['GET'])
+def get_doctor_locations():
+    return jsonify(DOCTOR_LOCATIONS)
+
+# Add a patient and automatically optimize route for that day
 @app.route('/api/patients', methods=['POST'])
 def add_patient():
     try:
@@ -118,7 +165,7 @@ def add_patient():
         # Ensure all required fields exist
         required_fields = ["name", "address", "desired_day", "desired_time"]
         if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400  # Return HTTP 400 Bad Request
+            return jsonify({"error": "Missing required fields"}), 400
 
         # Debugging: Log received data
         print("Received patient data:", data)
@@ -139,30 +186,62 @@ def add_patient():
         db.session.add(new_patient)
         db.session.commit()
 
-        return jsonify({"message": "Patient added successfully"}), 201  # Return HTTP 201 Created
-    except Exception as e:
-        print(f"❌ Error adding patient: {e}")  # Log error for debugging
-        return jsonify({"error": str(e)}), 500  # Return HTTP 500 Internal Server Error
+        # Automatically optimize route for this day
+        start_location = data.get('start_location', DEFAULT_START_LOCATION)
+        optimize_route_for_day(data['desired_day'], start_location)
 
-# Fetch optimized patient list for a specific day
+        return jsonify({"message": "Patient added successfully and route optimized"}), 201
+
+    except Exception as e:
+        print(f"❌ Error adding patient: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Manually optimize route for a specific day
+@app.route('/api/optimize-route', methods=['POST'])
+def optimize_route_manual():
+    try:
+        data = request.json
+        desired_day = data.get('desired_day')
+        start_location = data.get('start_location', DEFAULT_START_LOCATION)
+        
+        if not desired_day:
+            return jsonify({"error": "desired_day is required"}), 400
+            
+        if start_location not in DOCTOR_LOCATIONS:
+            return jsonify({"error": "Invalid start_location"}), 400
+
+        optimized_patients = optimize_route_for_day(desired_day, start_location)
+        
+        return jsonify({
+            "message": f"Route optimized for {desired_day}",
+            "optimized_count": len(optimized_patients),
+            "start_location": DOCTOR_LOCATIONS[start_location]["name"]
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error optimizing route: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Fetch patients for a specific day (now includes route_order)
 @app.route('/api/patients', methods=['GET'])
 def get_patients():
     try:
         day_filter = request.args.get('desired_day', None)
+        sort_by = request.args.get('sort_by', 'route_order')  # Default sort by route optimization
 
         if day_filter:
             patients = Patient.query.filter_by(desired_day=day_filter).all()
         else:
             patients = Patient.query.all()
 
-        # Filter out patients without GPS coordinates
-        patients_with_coordinates = [p for p in patients if p.latitude and p.longitude]
-
-        # Optimize the order
-        optimized_patients = optimize_route(patients_with_coordinates)
-
-        # Combine optimized patients with those missing GPS coordinates
-        final_list = optimized_patients + [p for p in patients if not (p.latitude and p.longitude)]
+        # Sort patients based on the requested parameter
+        if sort_by == 'route_order':
+            # Sort by route_order (optimized route), then by desired_time for those without route_order
+            patients.sort(key=lambda p: (p.route_order is None, p.route_order or 999, p.desired_time))
+        elif sort_by == 'desired_time':
+            patients.sort(key=lambda p: p.desired_time)
+        elif sort_by == 'address':
+            patients.sort(key=lambda p: p.address)
 
         return jsonify([
             {
@@ -177,9 +256,10 @@ def get_patients():
                 "reason": p.reason,
                 "questions": p.questions,
                 "phone": p.phone,
-                "seen": p.seen  # Include seen status in response
+                "seen": p.seen,
+                "route_order": p.route_order  # Include route optimization order
             }
-            for p in final_list
+            for p in patients
         ])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
