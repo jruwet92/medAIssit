@@ -139,7 +139,7 @@ def tsp_2opt_improvement(route, start_location, max_iterations=100):
     return current_route
 
 
-def optimize_patient_route(patients, start_location, desired_day=None):
+def optimize_patient_route(patients, start_location, desired_day=None, only_unseen=True):
     """
     Main optimization function - chooses the best algorithm based on problem size
     
@@ -147,6 +147,7 @@ def optimize_patient_route(patients, start_location, desired_day=None):
         patients: List of patient objects with latitude/longitude
         start_location: Tuple of (lat, lon) for starting point
         desired_day: Optional string for logging purposes
+        only_unseen: If True, only optimize routes for patients not yet seen
     
     Returns:
         List of patients in optimized order
@@ -154,16 +155,25 @@ def optimize_patient_route(patients, start_location, desired_day=None):
     if not patients:
         return []
 
-    # Filter patients with GPS coordinates
-    patients_with_gps = [p for p in patients if p.latitude is not None and p.longitude is not None]
+    # Filter patients with GPS coordinates and optionally only unseen patients
+    if only_unseen:
+        patients_with_gps = [p for p in patients 
+                           if p.latitude is not None and p.longitude is not None and not p.seen]
+        filter_msg = "unseen patients with GPS"
+    else:
+        patients_with_gps = [p for p in patients 
+                           if p.latitude is not None and p.longitude is not None]
+        filter_msg = "patients with GPS"
     
     if not patients_with_gps:
+        if desired_day:
+            print(f"ℹ️  No {filter_msg} found for {desired_day}")
         return []
 
     if desired_day:
-        print(f"🚗 Optimizing route for {len(patients_with_gps)} patients on {desired_day}")
+        print(f"🚗 Optimizing route for {len(patients_with_gps)} {filter_msg} on {desired_day}")
     else:
-        print(f"🚗 Optimizing route for {len(patients_with_gps)} patients")
+        print(f"🚗 Optimizing route for {len(patients_with_gps)} {filter_msg}")
     
     # Choose optimization method based on number of patients
     if len(patients_with_gps) <= 8:
