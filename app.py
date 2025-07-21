@@ -2,7 +2,14 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
-from math import radians, sin, cos, sqrt, atan2
+
+# Import our route optimization functions
+from route_optimizer import (
+    optimize_patient_route, 
+    calculate_total_route_distance, 
+    compare_route_algorithms,
+    get_algorithm_info
+)
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -88,22 +95,14 @@ class Patient(db.Model):
     route_order = db.Column(db.Integer, nullable=True)  # NEW COLUMN for optimization order
 
 
-# Haversine formula to calculate distance between two coordinates
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371  # Earth radius in km
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return R * c  # Distance in km
-
-# Optimize patient route using Nearest Neighbor Algorithm
 def optimize_route_for_day(desired_day, start_location_key="office"):
-    """Optimize route for all patients on a specific day and update their route_order"""
+    """
+    Optimize route for all patients on a specific day and update their route_order
+    Now uses the imported optimization functions
+    """
     try:
         start_location = DOCTOR_LOCATIONS[start_location_key]
-        start_lat, start_lon = start_location["latitude"], start_location["longitude"]
+        start_coords = (start_location["latitude"], start_location["longitude"])
         
         # Get all patients for the specific day with GPS coordinates
         patients = Patient.query.filter_by(desired_day=desired_day).filter(
@@ -114,20 +113,13 @@ def optimize_route_for_day(desired_day, start_location_key="office"):
         if not patients:
             return []
 
-        optimized_route = []
-        remaining_patients = patients[:]
-        current_location = (start_lat, start_lon)
+        # Use the imported optimization function
+        optimized_route = optimize_patient_route(patients, start_coords, desired_day)
+
+        # Update route_order in database
         route_order = 1
-
-        while remaining_patients:
-            next_patient = min(remaining_patients, key=lambda p: haversine(
-                current_location[0], current_location[1], p.latitude, p.longitude
-            ))
-
-            next_patient.route_order = route_order
-            optimized_route.append(next_patient)
-            remaining_patients.remove(next_patient)
-            current_location = (next_patient.latitude, next_patient.longitude)
+        for patient in optimized_route:
+            patient.route_order = route_order
             route_order += 1
 
         # Reset route_order for patients without GPS coordinates
@@ -146,6 +138,11 @@ def optimize_route_for_day(desired_day, start_location_key="office"):
     except Exception as e:
         print(f"❌ Error optimizing route: {e}")
         return []
+
+
+# =====================================
+# FLASK ROUTES AND ENDPOINTS
+# =====================================
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -215,9 +212,19 @@ def add_patient():
 
         # Automatically optimize route for this day
         start_location = data.get('start_location', DEFAULT_START_LOCATION)
-        optimize_route_for_day(data['desired_day'], start_location)
+        optimized_patients = optimize_route_for_day(data['desired_day'], start_location)
 
-        return jsonify({"message": "Patient added successfully and route optimized"}), 201
+        total_distance = 0
+        if optimized_patients:
+            start_coords = (DOCTOR_LOCATIONS[start_location]["latitude"], 
+                          DOCTOR_LOCATIONS[start_location]["longitude"])
+            total_distance = calculate_total_route_distance(optimized_patients, start_coords)
+
+        return jsonify({
+            "message": "Patient added successfully and route optimized",
+            "optimized_count": len(optimized_patients),
+            "total_distance": f"{total_distance:.2f} km"
+        }), 201
 
     except Exception as e:
         print(f"❌ Error adding patient: {e}")
@@ -239,14 +246,64 @@ def optimize_route_manual():
 
         optimized_patients = optimize_route_for_day(desired_day, start_location)
         
+        # Calculate total distance for response
+        total_distance = 0
+        algorithm_info = get_algorithm_info(len(optimized_patients))
+        
+        if optimized_patients:
+            start_coords = (DOCTOR_LOCATIONS[start_location]["latitude"], 
+                          DOCTOR_LOCATIONS[start_location]["longitude"])
+            total_distance = calculate_total_route_distance(optimized_patients, start_coords)
+        
         return jsonify({
             "message": f"Route optimized for {desired_day}",
             "optimized_count": len(optimized_patients),
-            "start_location": DOCTOR_LOCATIONS[start_location]["name"]
+            "start_location": DOCTOR_LOCATIONS[start_location]["name"],
+            "total_distance": f"{total_distance:.2f} km",
+            "algorithm_used": algorithm_info["algorithm"],
+            "algorithm_description": algorithm_info["description"]
         }), 200
 
     except Exception as e:
         print(f"❌ Error optimizing route: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# New endpoint to compare routing algorithms
+@app.route('/api/compare-routes', methods=['POST'])
+def compare_routes():
+    try:
+        data = request.json
+        desired_day = data.get('desired_day')
+        start_location = data.get('start_location', DEFAULT_START_LOCATION)
+        
+        if not desired_day:
+            return jsonify({"error": "desired_day is required"}), 400
+            
+        if start_location not in DOCTOR_LOCATIONS:
+            return jsonify({"error": "Invalid start_location"}), 400
+
+        # Get patients with GPS coordinates
+        patients = Patient.query.filter_by(desired_day=desired_day).filter(
+            Patient.latitude.isnot(None), 
+            Patient.longitude.isnot(None)
+        ).all()
+
+        if not patients:
+            return jsonify({"error": "No patients with GPS coordinates found"}), 400
+
+        start_coords = (DOCTOR_LOCATIONS[start_location]["latitude"], 
+                       DOCTOR_LOCATIONS[start_location]["longitude"])
+
+        # Compare algorithms using imported function
+        compare_route_algorithms(patients, start_coords)
+        
+        return jsonify({
+            "message": "Route comparison completed - check server logs for details",
+            "patient_count": len(patients)
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error comparing routes: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Fetch patients for a specific day (now includes route_order)
