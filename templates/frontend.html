@@ -553,14 +553,6 @@
 
         // Initialize page
         document.addEventListener("DOMContentLoaded", () => {
-            // Redirect to login if not authenticated
-            fetch('/api/patients')
-                .then(response => {
-                    if (response.status === 401) {
-                        window.location.href = '/login';
-                    }
-                });
-
             // Initialize the page with today's date and auto-optimize
             updateDateButtons();
             lastSelectedLocation = document.getElementById('doctorLocation').value;
